@@ -110,10 +110,23 @@ n8n descarta cosas al importar. Hay que rellenarlas:
 1. **`settings.timezone`** → `America/Monterrey`. n8n lo **descarta** al
    importar, y sin él los cron corren en el huso de la instancia. El de
    FTS corre en **UTC-4**, así que las 3:00 am serían la 1:00 am.
-2. **Credenciales**: `REEMPLAZAR_CRED_APP_RW`, `REEMPLAZAR_CRED_CONFIG_RO`
-   y `REEMPLAZAR_CRED_SMTP`. **`config_ro` va en UN SOLO nodo de todo el
-   sistema**: `Postgres - Secreto`, dentro de `tes/validar-token`. Si
-   aparece en cualquier otro lado, está mal.
+2. **Credenciales.** Los marcadores del JSON y el nombre que tiene que
+   llevar cada credencial en n8n:
+
+   | Marcador en el JSON | Credencial en n8n | Tipo | Dónde va |
+   |---|---|---|---|
+   | `REEMPLAZAR_CRED_APP_RW` | `tesoreria-escolar-db · app_rw` | Postgres | los 10 nodos de Postgres menos uno |
+   | `REEMPLAZAR_CRED_CONFIG_RO` | `tesoreria-escolar-db · config_ro` | Postgres | **un solo nodo**: `Postgres - Secreto`, en `tes/validar-token` |
+   | `REEMPLAZAR_CRED_SMTP` | `tesoreria-escolar · correo` | SMTP | `Enviar respaldo` y `Avisar` |
+
+   Si `config_ro` aparece en cualquier otro nodo, está mal.
+
+   ℹ️ **El rol `log_ins` NO tiene credencial en n8n**, y no es un olvido:
+   ningún workflow lo usa. Existe en la base como la puerta más angosta
+   posible —solo `INSERT` sobre `bitacora`— para cualquier cosa futura que
+   solo tenga que dejar rastro. Los workflows escriben la bitácora con
+   `app_rw` a través de `bitacora_escribir()`, que es lo que permite que
+   entre en la MISMA transacción que el cambio.
 3. **`REEMPLAZAR_ID_VALIDAR_TOKEN`**: el id que n8n le dé a
    `tes/validar-token` al importarlo. Va en los cinco de API, en el nodo
    «Validar token». **Importa ése primero.**

@@ -66,7 +66,7 @@
       "credentials": {
         "postgres": {
           "id": "REEMPLAZAR_CRED_APP_RW",
-          "name": "tesoreria-db · app_rw"
+          "name": "tesoreria-escolar-db · app_rw"
         }
       }
     },
@@ -91,7 +91,7 @@
       "credentials": {
         "postgres": {
           "id": "REEMPLAZAR_CRED_CONFIG_RO",
-          "name": "tesoreria-db · config_ro"
+          "name": "tesoreria-escolar-db · config_ro"
         }
       }
     },

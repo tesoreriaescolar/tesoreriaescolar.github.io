@@ -11,7 +11,7 @@ secundaria: el año escolar es un dato, no una suposición del código.
 | | |
 |---|---|
 | Pantalla | Un solo `index.html`, sin framework. GitHub Pages desde `main`, carpeta raíz. |
-| Lógica | Ocho workflows de n8n. Toda la validación de permisos vive ahí. |
+| Lógica | Ocho workflows de n8n (`tes/…`). Toda la validación de permisos vive ahí. Tres credenciales: `tesoreria-escolar-db · app_rw`, `tesoreria-escolar-db · config_ro` y `tesoreria-escolar · correo`. |
 | Datos | PostgreSQL en Railway. Nueve tablas. |
 | Fotos | Bucket S3 en Railway. Las fotos **nunca** pasan por la base ni por n8n. |
 

@@ -43,7 +43,7 @@
       "credentials": {
         "postgres": {
           "id": "REEMPLAZAR_CRED_APP_RW",
-          "name": "tesoreria-db · app_rw"
+          "name": "tesoreria-escolar-db · app_rw"
         }
       }
     },
@@ -104,7 +104,7 @@
       "credentials": {
         "smtp": {
           "id": "REEMPLAZAR_CRED_SMTP",
-          "name": "tesoreria · correo"
+          "name": "tesoreria-escolar · correo"
         }
       }
     }
