@@ -51,7 +51,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "/* Nodo: \"Code - Armar respaldo\"  (workflow tes/respaldo, 3:00 am)\n\n   Toma el volcado de las nueve tablas y arma:\n     - el archivo JSON adjunto\n     - el cuerpo del correo con el resumen y los movimientos del día\n\n   Dos reglas del encargo se cumplen aquí y se ven en el código:\n     1. La CLABE va ENMASCARADA: solo los últimos 4.\n     2. Las FOTOS no van. Solo sus llaves. */\n\nlet salida;\ntry {\n  const fila = $input.first().json || {};\n  const d = fila.datos || {};\n  // Los correos salen de config_app, no del repo. Se propagan porque el\n  // nodo de correo lee de la salida de ESTE nodo.\n  const correoDestino = fila.correo_destino || '';\n  const correoOrigen = fila.correo_origen || '';\n\n  // --- 1. Enmascarar la CLABE antes de que toque el archivo ---------\n  const ultimos4 = (c) => {\n    const s = String(c || '');\n    return s.length >= 4 ? '•'.repeat(Math.max(0, s.length - 4)) + s.slice(-4) : (s ? '••••' : '');\n  };\n  (d.presupuestos || []).forEach((p) => { p.clabe = ultimos4(p.clabe); });\n\n  // --- 2. Los hashes tampoco van --------------------------------------\n  // No se pidió, pero un respaldo por correo con los hashes adentro es\n  // un respaldo que hay que cuidar como si fuera la base. Así no.\n  (d.personas || []).forEach((p) => { delete p.hash; });\n\n  const hoy = new Date().toISOString().slice(0, 10);\n  const conteos = {};\n  const NUEVE = ['ciclos','grupos','personas','membresias','presupuestos',\n                 'eventos','evento_grupo','gastos','bitacora'];\n  NUEVE.forEach((t) => { conteos[t] = (d[t] || []).length; });\n\n  const archivo = JSON.stringify({\n    _meta: {\n      generado: new Date().toISOString(),\n      fecha: hoy,\n      tablas: NUEVE,\n      conteos: conteos,\n      nota: 'La CLABE va enmascarada (ultimos 4). Los hashes de contrasena no se incluyen. Las fotos de tickets NO estan aqui: solo su ticket_key en el bucket.'\n    },\n    datos: d\n  }, null, 1);\n\n  const movs = d.movimientos || [];\n  const fila = (m) => `<tr><td style=\"padding:4px 10px;border-bottom:1px solid #e5e5e5\">${\n      String(m.cuando || '').slice(11, 16)}</td><td style=\"padding:4px 10px;border-bottom:1px solid #e5e5e5\">${\n      esc(m.quien || 'sistema')}</td><td style=\"padding:4px 10px;border-bottom:1px solid #e5e5e5\">${\n      esc(m.accion)}</td><td style=\"padding:4px 10px;border-bottom:1px solid #e5e5e5\">${esc(m.tabla)}</td></tr>`;\n\n  const html = `\n    <div style=\"font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;color:#13202B\">\n      <h2 style=\"margin:0 0 4px\">Respaldo de Tesorería Escolar</h2>\n      <p style=\"color:#5C6B78;margin:0 0 16px\">${hoy} · ciclo ${esc((d.ciclos || []).filter((c) => c.activo).map((c) => c.nombre)[0] || '—')}</p>\n      <table style=\"border-collapse:collapse;margin-bottom:18px\">\n        ${NUEVE.map((t) => `<tr><td style=\"padding:2px 14px 2px 0\">${t}</td><td style=\"text-align:right\">${conteos[t]}</td></tr>`).join('')}\n      </table>\n      <h3 style=\"margin:0 0 6px\">Movimientos de las últimas 24 horas (${movs.length})</h3>\n      ${movs.length\n        ? `<table style=\"border-collapse:collapse;font-size:13px\"><tr style=\"text-align:left;color:#5C6B78\">\n             <th style=\"padding:4px 10px\">Hora</th><th style=\"padding:4px 10px\">Quién</th>\n             <th style=\"padding:4px 10px\">Acción</th><th style=\"padding:4px 10px\">Tabla</th></tr>\n           ${movs.map(fila).join('')}</table>`\n        : '<p style=\"color:#5C6B78\">Sin movimientos.</p>'}\n      <p style=\"color:#5C6B78;font-size:12px;margin-top:20px\">\n        El archivo adjunto trae las nueve tablas. La CLABE va enmascarada (solo los últimos 4) y\n        los hashes de contraseña no se incluyen. Las fotos de los tickets no viajan aquí: en su\n        lugar va la llave de cada una en el bucket.</p>\n    </div>`;\n\n  function esc(s) {\n    return String(s === null || s === undefined ? '' : s)\n      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\n  }\n\n  salida = {\n    json: {\n      ok: true,\n      correo_destino: correoDestino,\n      correo_origen: correoOrigen,\n      asunto: `Respaldo Tesorería Escolar · ${hoy} · ${movs.length} movimiento(s)`,\n      html: html,\n      conteos: conteos,\n      movimientos: movs.length\n    },\n    binary: {\n      respaldo: {\n        data: Buffer.from(archivo, 'utf8').toString('base64'),\n        mimeType: 'application/json',\n        fileName: `tesoreria-${hoy}.json`\n      }\n    }\n  };\n} catch (e) {\n  // Que el respaldo truene NO puede quedarse callado: el vigía de las\n  // 9 am se entera porque no hay renglón de bitácora, pero además el\n  // correo sale igual diciendo que falló.\n  // Aun fallando hay que poder mandar el aviso, así que los correos se\n  // vuelven a leer de la entrada en vez de darlos por perdidos.\n  const f = $input.first().json || {};\n  salida = { json: { ok: false,\n                     correo_destino: f.correo_destino || '',\n                     correo_origen: f.correo_origen || '',\n                     error: 'RESPALDO_FALLO',\n                     asunto: 'FALLÓ el respaldo de Tesorería Escolar',\n                     html: '<p>El respaldo de las 3:00 am no se pudo armar. Revisa la ejecución en n8n.</p>' } };\n}\n\nreturn [salida];\n"
+        "jsCode": "/* Nodo: \"Code - Armar respaldo\"  (workflow tes/respaldo, 3:00 am)\n\n   Toma el volcado de las nueve tablas y arma:\n     - el archivo JSON adjunto\n     - el cuerpo del correo con el resumen y los movimientos del día\n\n   Dos reglas del encargo se cumplen aquí y se ven en el código:\n     1. La CLABE va ENMASCARADA: solo los últimos 4.\n     2. Las FOTOS no van. Solo sus llaves. */\n\nlet salida;\ntry {\n  const fila = $input.first().json || {};\n  const d = fila.datos || {};\n  // Los correos salen de config_app, no del repo. Se propagan porque el\n  // nodo de correo lee de la salida de ESTE nodo.\n  const correoDestino = fila.correo_destino || '';\n  const correoOrigen = fila.correo_origen || '';\n\n  // --- 1. Enmascarar la CLABE antes de que toque el archivo ---------\n  const ultimos4 = (c) => {\n    const s = String(c || '');\n    return s.length >= 4 ? '•'.repeat(Math.max(0, s.length - 4)) + s.slice(-4) : (s ? '••••' : '');\n  };\n  (d.presupuestos || []).forEach((p) => { p.clabe = ultimos4(p.clabe); });\n\n  // --- 2. Los hashes tampoco van --------------------------------------\n  // No se pidió, pero un respaldo por correo con los hashes adentro es\n  // un respaldo que hay que cuidar como si fuera la base. Así no.\n  (d.personas || []).forEach((p) => { delete p.hash; });\n\n  const hoy = new Date().toISOString().slice(0, 10);\n  const conteos = {};\n  const NUEVE = ['ciclos','grupos','personas','membresias','presupuestos',\n                 'eventos','evento_grupo','gastos','bitacora'];\n  NUEVE.forEach((t) => { conteos[t] = (d[t] || []).length; });\n\n  const archivo = JSON.stringify({\n    _meta: {\n      generado: new Date().toISOString(),\n      fecha: hoy,\n      tablas: NUEVE,\n      conteos: conteos,\n      nota: 'La CLABE va enmascarada (ultimos 4). Los hashes de contrasena no se incluyen. Las fotos de tickets NO estan aqui: solo su ticket_key en el bucket.'\n    },\n    datos: d\n  }, null, 1);\n\n  const movs = d.movimientos || [];\n  const renglon = (m) => `<tr><td style=\"padding:4px 10px;border-bottom:1px solid #e5e5e5\">${\n      String(m.cuando || '').slice(11, 16)}</td><td style=\"padding:4px 10px;border-bottom:1px solid #e5e5e5\">${\n      esc(m.quien || 'sistema')}</td><td style=\"padding:4px 10px;border-bottom:1px solid #e5e5e5\">${\n      esc(m.accion)}</td><td style=\"padding:4px 10px;border-bottom:1px solid #e5e5e5\">${esc(m.tabla)}</td></tr>`;\n\n  const html = `\n    <div style=\"font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;color:#13202B\">\n      <h2 style=\"margin:0 0 4px\">Respaldo de Tesorería Escolar</h2>\n      <p style=\"color:#5C6B78;margin:0 0 16px\">${hoy} · ciclo ${esc((d.ciclos || []).filter((c) => c.activo).map((c) => c.nombre)[0] || '—')}</p>\n      <table style=\"border-collapse:collapse;margin-bottom:18px\">\n        ${NUEVE.map((t) => `<tr><td style=\"padding:2px 14px 2px 0\">${t}</td><td style=\"text-align:right\">${conteos[t]}</td></tr>`).join('')}\n      </table>\n      <h3 style=\"margin:0 0 6px\">Movimientos de las últimas 24 horas (${movs.length})</h3>\n      ${movs.length\n        ? `<table style=\"border-collapse:collapse;font-size:13px\"><tr style=\"text-align:left;color:#5C6B78\">\n             <th style=\"padding:4px 10px\">Hora</th><th style=\"padding:4px 10px\">Quién</th>\n             <th style=\"padding:4px 10px\">Acción</th><th style=\"padding:4px 10px\">Tabla</th></tr>\n           ${movs.map(renglon).join('')}</table>`\n        : '<p style=\"color:#5C6B78\">Sin movimientos.</p>'}\n      <p style=\"color:#5C6B78;font-size:12px;margin-top:20px\">\n        El archivo adjunto trae las nueve tablas. La CLABE va enmascarada (solo los últimos 4) y\n        los hashes de contraseña no se incluyen. Las fotos de los tickets no viajan aquí: en su\n        lugar va la llave de cada una en el bucket.</p>\n    </div>`;\n\n  function esc(s) {\n    return String(s === null || s === undefined ? '' : s)\n      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\n  }\n\n  /* --- 3. El sobre para Microsoft Graph -----------------------------\n     No hay credencial SMTP: el correo de FTS sale por Graph con la\n     credencial de aplicacion \"Microsoft Graph - sales\". El patron se copia\n     de comercial/cotizacion, que ya manda el PDF de las cotizaciones: el\n     adjunto va como fileAttachment con el archivo en base64 dentro de\n     `contentBytes`, NO como binario de n8n.\n\n     El remitente va en la URL del nodo siguiente y sale de `correo_origen`.\n     La politica de acceso de Azure acota la aplicacion a sales@fts.mx: si\n     `correo_origen` fuera otra casilla, Graph contesta 403. */\n  const adjunto = Buffer.from(archivo, 'utf8');\n  const nombreArchivo = `tesoreria-${hoy}.json`;\n\n  /* Graph en una sola llamada aguanta ~4 MB con el sobrecosto de base64.\n     Tope 3 MB, igual que el adjunto de cotizacion. Pasarse NO es cosmetico:\n     un correo de respaldo sin el respaldo no es un respaldo. Por eso sale\n     con ok:false, no se escribe el renglon de bitacora, y el vigia de las\n     9 am lo grita. */\n  const cabe = adjunto.length <= 3 * 1024 * 1024;\n\n  const sobre = {\n    message: {\n      subject: cabe\n        ? `Respaldo Tesorería Escolar · ${hoy} · ${movs.length} movimiento(s)`\n        : `FALLÓ el respaldo de Tesorería Escolar · ${hoy} · el volcado ya no cabe`,\n      body: { contentType: 'HTML', content: cabe ? html : (\n        '<p>El volcado pesa ' + Math.round(adjunto.length / 1024) + ' KB y el envío en una ' +\n        'sola llamada topa en 3 MB, así que <b>no se adjuntó</b>.</p>' +\n        '<p>La base está bien; lo que se quedó corto es este correo. Hay que ' +\n        'cambiar el respaldo a otro medio (subirlo al bucket y mandar el enlace).</p>') },\n      toRecipients: [{ emailAddress: { address: correoDestino } }]\n    },\n    saveToSentItems: true\n  };\n  if (cabe) {\n    sobre.message.attachments = [{\n      '@odata.type': '#microsoft.graph.fileAttachment',\n      name: nombreArchivo,\n      contentType: 'application/json',\n      contentBytes: adjunto.toString('base64')\n    }];\n  }\n\n  salida = {\n    json: {\n      ok: cabe,\n      error: cabe ? null : 'RESPALDO_NO_CABE',\n      correo_destino: correoDestino,\n      correo_origen: correoOrigen,\n      asunto: sobre.message.subject,\n      html: html,\n      conteos: conteos,\n      movimientos: movs.length,\n      adjunto: { nombre: nombreArchivo, kb: Math.round(adjunto.length / 1024), va: cabe },\n      graph: sobre\n    }\n  };\n} catch (e) {\n  // Que el respaldo truene NO puede quedarse callado: el vigía de las\n  // 9 am se entera porque no hay renglón de bitácora, pero además el\n  // correo sale igual diciendo que falló.\n  // Aun fallando hay que poder mandar el aviso, así que los correos se\n  // vuelven a leer de la entrada en vez de darlos por perdidos.\n  const f = $input.first().json || {};\n  const asuntoFallo = 'FALLÓ el respaldo de Tesorería Escolar';\n  const htmlFallo = '<p>El respaldo de las 3:00 am no se pudo armar. Revisa la ejecución en n8n.</p>' +\n                    '<p style=\"color:#5C6B78;font-size:12px\">' +\n                    String((e && e.message) || '').slice(0, 200) + '</p>';\n  salida = { json: { ok: false,\n                     correo_destino: f.correo_destino || '',\n                     correo_origen: f.correo_origen || '',\n                     error: 'RESPALDO_FALLO',\n                     asunto: asuntoFallo,\n                     html: htmlFallo,\n                     adjunto: { nombre: null, kb: 0, va: false },\n                     /* El aviso sale por Graph igual que el respaldo bueno: un\n                        solo camino de salida, para que no haya una rama que se\n                        desincronice con la otra. */\n                     graph: { message: {\n                         subject: asuntoFallo,\n                         body: { contentType: 'HTML', content: htmlFallo },\n                         toRecipients: [{ emailAddress: { address: f.correo_destino || '' } }]\n                       }, saveToSentItems: true } } };\n}\n\nreturn [salida];\n"
       },
       "id": "c1d3743f-18f7-4ffb-8468-8d5bfdf2b0ef",
       "name": "Code - Armar respaldo",
@@ -64,37 +64,60 @@
     },
     {
       "parameters": {
-        "fromEmail": "={{ $json.correo_origen }}",
-        "toEmail": "={{ $json.correo_destino }}",
-        "subject": "={{ $json.asunto }}",
-        "emailFormat": "html",
-        "html": "={{ $json.html }}",
+        "method": "POST",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $json.correo_origen }}/sendMail",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.graph) }}",
         "options": {
-          "fileAttachments": "respaldo",
-          "appendAttribution": false
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
         }
       },
-      "id": "d174f8e2-c646-41a6-85d2-d95e31424e27",
-      "name": "Enviar respaldo",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
+      "id": "6921c661-f116-499d-8d05-9b33c63fa5db",
+      "name": "Enviar respaldo (Graph)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         600,
         0
       ],
+      "alwaysOutputData": true,
       "credentials": {
-        "smtp": {
-          "id": "REEMPLAZAR_CRED_SMTP",
-          "name": "tesoreria-escolar · correo"
+        "oAuth2Api": {
+          "id": "REEMPLAZAR_CRED_GRAPH",
+          "name": "Microsoft Graph - sales"
         }
       }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/* Nodo: \"Code - ¿Confirmado?\"  (workflow tes/respaldo, 3:00 am)\n\n   Decide si el renglón de bitácora se escribe o no.\n\n   EL RENGLÓN DE BITÁCORA ES LA PRUEBA DE QUE EL RESPALDO LLEGÓ, y es lo\n   único que mira el vigía de las 9 am. Escribirlo cuando el correo no\n   salió convertiría al vigía en un testigo falso: diría \"todo bien\" la\n   mañana en que no hubo respaldo. Es el mismo error que pintar el ✓ del\n   kiosko antes de que el servidor confirme.\n\n   Graph contesta 202 con el cuerpo vacío cuando aceptó el mensaje. Ese\n   202 es lo único que cuenta. Cualquier otro código, o un fallo de red,\n   es NO ENVIADO.\n\n   Cuando no procede se devuelve la lista VACÍA. En n8n eso salta el nodo\n   siguiente sin ramas ni banderas: no hay un camino alterno que pueda\n   desincronizarse con éste. Y el silencio no se queda callado —el vigía\n   lo grita a las 9. */\n\nconst r = $input.first().json || {};\nconst code = (r.statusCode !== undefined) ? r.statusCode\n           : (r.error && r.error.statusCode) ? r.error.statusCode : null;\n\nconst armado = $('Code - Armar respaldo').first().json || {};\n\n/* Dos condiciones, y las dos tienen que valer:\n     · Graph aceptó el mensaje (202)\n     · el respaldo se armó completo (si el volcado no cupo en el adjunto,\n       el correo salió avisando, pero NO hubo respaldo) */\nconst entregado = (code === 202);\nconst completo = (armado.ok === true);\n\nif (!entregado || !completo) return [];\n\nreturn [{ json: {\n  conteos: armado.conteos || {},\n  adjunto: armado.adjunto || null,\n  http: code\n} }];\n"
+      },
+      "id": "2e135d84-53b1-4373-8ae6-7108ddc90229",
+      "name": "Code - ¿Confirmado?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT bitacora_escribir(NULL, 'respaldo', 'sistema', NULL, NULL, $1::jsonb, NULL) AS bid",
         "options": {
-          "queryReplacement": "={{ [JSON.stringify({conteos: $('Code - Armar respaldo').first().json.conteos || {}})] }}",
+          "queryReplacement": "={{ [JSON.stringify({conteos: $json.conteos || {}})] }}",
           "queryBatching": "single",
           "largeNumbersOutput": "numbers"
         }
@@ -104,7 +127,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        800,
+        1000,
         0
       ],
       "credentials": {
@@ -142,14 +165,25 @@
       "main": [
         [
           {
-            "node": "Enviar respaldo",
+            "node": "Enviar respaldo (Graph)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Enviar respaldo": {
+    "Enviar respaldo (Graph)": {
+      "main": [
+        [
+          {
+            "node": "Code - ¿Confirmado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - ¿Confirmado?": {
       "main": [
         [
           {

@@ -59,6 +59,30 @@ habría que saber la contraseña de esa persona, y con eso se podría entrar
 igual. Verificar la firma no agregaría nada y obligaría a que `tes/auth`
 alcanzara el secreto.
 
+**4-bis. El correo sale por Microsoft Graph, no por SMTP.**
+No hay credencial SMTP en esta instancia de n8n. El correo de FTS sale por
+una credencial OAuth2 de aplicación (`Microsoft Graph - sales`) contra
+`POST https://graph.microsoft.com/v1.0/users/<remitente>/sendMail`.
+
+El patrón no se inventó: está copiado de `comercial/cotizacion`, que ya
+manda por ahí el PDF de las cotizaciones. Lo que hay que saber:
+
+- **Éxito es 202 con el cuerpo VACÍO.** No 200. El nodo HTTP va con
+  `fullResponse` + `neverError` para poder *leer* el código en vez de
+  lanzar, y quien decide si hubo envío es el nodo siguiente.
+- **El adjunto va en base64 dentro del JSON**, como
+  `#microsoft.graph.fileAttachment` con `contentBytes` — no como binario
+  de n8n. Tope **3 MB**: el envío en una sola llamada topa cerca de 4 MB
+  con el sobrecosto de base64.
+- **El remitente va en la URL** y sale de `config_app.correo_origen`. La
+  política de acceso de Azure acota la aplicación a una sola casilla; otra
+  daría 403.
+- **El renglón de bitácora del respaldo se escribe SOLO si hubo 202.** Ese
+  renglón es lo único que mira el vigía: escribirlo sin envío lo
+  convertiría en un testigo falso. `Code - ¿Confirmado?` devuelve la lista
+  vacía cuando no procede, y n8n salta el nodo siguiente sin necesidad de
+  una rama que pueda desincronizarse.
+
 **5. El bucket de Railway es virtual-hosted, y elegir mal no lo dice.**
 La URL firmada se arma `https://<bucket>.<endpoint>/<llave>`, no
 `https://<endpoint>/<bucket>/<llave>`. El host y la ruta entran en el texto
@@ -130,7 +154,7 @@ n8n descarta cosas al importar. Hay que rellenarlas:
    |---|---|---|---|
    | `REEMPLAZAR_CRED_APP_RW` | `tesoreria-escolar-db · app_rw` | Postgres | los 10 nodos de Postgres menos uno |
    | `REEMPLAZAR_CRED_CONFIG_RO` | `tesoreria-escolar-db · config_ro` | Postgres | **un solo nodo**: `Postgres - Secreto`, en `tes/validar-token` |
-   | `REEMPLAZAR_CRED_SMTP` | `tesoreria-escolar · correo` | SMTP | `Enviar respaldo` y `Avisar` |
+   | `REEMPLAZAR_CRED_GRAPH` | `Microsoft Graph - sales` | OAuth2 (genérica) | `Enviar respaldo (Graph)` y `Avisar (Graph)` |
 
    Si `config_ro` aparece en cualquier otro nodo, está mal.
 

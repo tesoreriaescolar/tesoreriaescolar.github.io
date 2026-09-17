@@ -47,7 +47,7 @@ try {
   }, null, 1);
 
   const movs = d.movimientos || [];
-  const fila = (m) => `<tr><td style="padding:4px 10px;border-bottom:1px solid #e5e5e5">${
+  const renglon = (m) => `<tr><td style="padding:4px 10px;border-bottom:1px solid #e5e5e5">${
       String(m.cuando || '').slice(11, 16)}</td><td style="padding:4px 10px;border-bottom:1px solid #e5e5e5">${
       esc(m.quien || 'sistema')}</td><td style="padding:4px 10px;border-bottom:1px solid #e5e5e5">${
       esc(m.accion)}</td><td style="padding:4px 10px;border-bottom:1px solid #e5e5e5">${esc(m.tabla)}</td></tr>`;
@@ -64,7 +64,7 @@ try {
         ? `<table style="border-collapse:collapse;font-size:13px"><tr style="text-align:left;color:#5C6B78">
              <th style="padding:4px 10px">Hora</th><th style="padding:4px 10px">Quién</th>
              <th style="padding:4px 10px">Acción</th><th style="padding:4px 10px">Tabla</th></tr>
-           ${movs.map(fila).join('')}</table>`
+           ${movs.map(renglon).join('')}</table>`
         : '<p style="color:#5C6B78">Sin movimientos.</p>'}
       <p style="color:#5C6B78;font-size:12px;margin-top:20px">
         El archivo adjunto trae las nueve tablas. La CLABE va enmascarada (solo los últimos 4) y
@@ -77,22 +77,61 @@ try {
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  /* --- 3. El sobre para Microsoft Graph -----------------------------
+     No hay credencial SMTP: el correo de FTS sale por Graph con la
+     credencial de aplicacion "Microsoft Graph - sales". El patron se copia
+     de comercial/cotizacion, que ya manda el PDF de las cotizaciones: el
+     adjunto va como fileAttachment con el archivo en base64 dentro de
+     `contentBytes`, NO como binario de n8n.
+
+     El remitente va en la URL del nodo siguiente y sale de `correo_origen`.
+     La politica de acceso de Azure acota la aplicacion a sales@fts.mx: si
+     `correo_origen` fuera otra casilla, Graph contesta 403. */
+  const adjunto = Buffer.from(archivo, 'utf8');
+  const nombreArchivo = `tesoreria-${hoy}.json`;
+
+  /* Graph en una sola llamada aguanta ~4 MB con el sobrecosto de base64.
+     Tope 3 MB, igual que el adjunto de cotizacion. Pasarse NO es cosmetico:
+     un correo de respaldo sin el respaldo no es un respaldo. Por eso sale
+     con ok:false, no se escribe el renglon de bitacora, y el vigia de las
+     9 am lo grita. */
+  const cabe = adjunto.length <= 3 * 1024 * 1024;
+
+  const sobre = {
+    message: {
+      subject: cabe
+        ? `Respaldo Tesorería Escolar · ${hoy} · ${movs.length} movimiento(s)`
+        : `FALLÓ el respaldo de Tesorería Escolar · ${hoy} · el volcado ya no cabe`,
+      body: { contentType: 'HTML', content: cabe ? html : (
+        '<p>El volcado pesa ' + Math.round(adjunto.length / 1024) + ' KB y el envío en una ' +
+        'sola llamada topa en 3 MB, así que <b>no se adjuntó</b>.</p>' +
+        '<p>La base está bien; lo que se quedó corto es este correo. Hay que ' +
+        'cambiar el respaldo a otro medio (subirlo al bucket y mandar el enlace).</p>') },
+      toRecipients: [{ emailAddress: { address: correoDestino } }]
+    },
+    saveToSentItems: true
+  };
+  if (cabe) {
+    sobre.message.attachments = [{
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name: nombreArchivo,
+      contentType: 'application/json',
+      contentBytes: adjunto.toString('base64')
+    }];
+  }
+
   salida = {
     json: {
-      ok: true,
+      ok: cabe,
+      error: cabe ? null : 'RESPALDO_NO_CABE',
       correo_destino: correoDestino,
       correo_origen: correoOrigen,
-      asunto: `Respaldo Tesorería Escolar · ${hoy} · ${movs.length} movimiento(s)`,
+      asunto: sobre.message.subject,
       html: html,
       conteos: conteos,
-      movimientos: movs.length
-    },
-    binary: {
-      respaldo: {
-        data: Buffer.from(archivo, 'utf8').toString('base64'),
-        mimeType: 'application/json',
-        fileName: `tesoreria-${hoy}.json`
-      }
+      movimientos: movs.length,
+      adjunto: { nombre: nombreArchivo, kb: Math.round(adjunto.length / 1024), va: cabe },
+      graph: sobre
     }
   };
 } catch (e) {
@@ -102,12 +141,25 @@ try {
   // Aun fallando hay que poder mandar el aviso, así que los correos se
   // vuelven a leer de la entrada en vez de darlos por perdidos.
   const f = $input.first().json || {};
+  const asuntoFallo = 'FALLÓ el respaldo de Tesorería Escolar';
+  const htmlFallo = '<p>El respaldo de las 3:00 am no se pudo armar. Revisa la ejecución en n8n.</p>' +
+                    '<p style="color:#5C6B78;font-size:12px">' +
+                    String((e && e.message) || '').slice(0, 200) + '</p>';
   salida = { json: { ok: false,
                      correo_destino: f.correo_destino || '',
                      correo_origen: f.correo_origen || '',
                      error: 'RESPALDO_FALLO',
-                     asunto: 'FALLÓ el respaldo de Tesorería Escolar',
-                     html: '<p>El respaldo de las 3:00 am no se pudo armar. Revisa la ejecución en n8n.</p>' } };
+                     asunto: asuntoFallo,
+                     html: htmlFallo,
+                     adjunto: { nombre: null, kb: 0, va: false },
+                     /* El aviso sale por Graph igual que el respaldo bueno: un
+                        solo camino de salida, para que no haya una rama que se
+                        desincronice con la otra. */
+                     graph: { message: {
+                         subject: asuntoFallo,
+                         body: { contentType: 'HTML', content: htmlFallo },
+                         toRecipients: [{ emailAddress: { address: f.correo_destino || '' } }]
+                       }, saveToSentItems: true } } };
 }
 
 return [salida];
