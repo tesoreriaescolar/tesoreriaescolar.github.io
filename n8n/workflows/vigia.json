@@ -149,9 +149,9 @@
   "settings": {
     "executionOrder": "v1",
     "timezone": "America/Monterrey",
-    "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all",
-    "saveManualExecutions": true
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false
   },
   "meta": {
     "descripcion": "Cron 9:00 am. Si no hubo respaldo en las ultimas 24 horas, avisa por correo. Lee la fecha con ultimo_respaldo(), la unica ventana de lectura a la bitacora que tiene app_rw."

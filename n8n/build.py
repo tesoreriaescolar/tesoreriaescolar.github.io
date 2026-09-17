@@ -29,6 +29,48 @@ CRED_APP = {"id": "REEMPLAZAR_CRED_APP_RW",  "name": "tesoreria-db · app_rw"}
 CRED_CFG = {"id": "REEMPLAZAR_CRED_CONFIG_RO", "name": "tesoreria-db · config_ro"}
 CRED_SMTP= {"id": "REEMPLAZAR_CRED_SMTP",    "name": "tesoreria · correo"}
 ID_VALIDAR = "REEMPLAZAR_ID_VALIDAR_TOKEN"
+
+# El navegador solo puede llamar a estos webhooks desde el dominio de la
+# aplicación. No es lo que impide entrar —eso lo hace el token, que va en
+# el cuerpo— pero recorta a quién le contesta el navegador y no cuesta.
+ORIGEN_PAGES = "https://tesoreriaescolar.github.io"
+
+# ---------------------------------------------------------------------
+#  Workflows que NO pueden guardar sus ejecuciones.
+#
+#  n8n guarda la SALIDA DE CADA NODO de las ejecuciones que conserva. Da
+#  igual que el nodo no lance: en el camino feliz, lo que el nodo
+#  devuelve se escribe tal cual en la base de n8n. O sea que un nodo que
+#  devuelve un secreto lo escribe EN CLARO, en cada petición.
+#
+#  Los cinco, y qué se guardaba de cada uno:
+#    tes/validar-token  el secreto del JWT, en CADA petición del sistema
+#    tes/tesoreria      s3_key_id y s3_secret, en cada acción de ticket
+#    tes/auth           el hash de la persona, en cada intento de login
+#    tes/respaldo       la base ENTERA: CLABEs SIN enmascarar y todos los
+#                       hashes. El enmascarado ocurre en el nodo
+#                       SIGUIENTE, así que lo que se guardaba era el
+#                       volcado crudo, cada noche
+#    tes/vigia          un correo personal
+#
+#  ⚠️ saveManualExecutions TAMBIÉN va en false, y no es un detalle: se
+#  rige por su propia bandera. Una corrida a mano desde la UI —que es
+#  justo lo que se hace al importar y probar— guardaría todo aunque las
+#  otras dos digan "none". Cerrar solo las dos primeras deja abierta la
+#  puerta por la que más fácil se entra.
+#
+#  Lo que cuesta: en estos cinco no hay datos de ejecución que mirar
+#  cuando algo falle. Si hace falta depurar uno, se pone su
+#  saveDataErrorExecution en "all" un rato Y SE VUELVE A DEJAR EN "none".
+#  Que un fallo del respaldo no se note lo cubre el vigía de las 9 am.
+#
+#  ⚠️ Esto es un AJUSTE, no una propiedad del diseño: quien lo cambie en
+#  la UI reabre el hoyo sin que nada avise. El arreglo estructural es que
+#  el secreto no sea nunca la salida de un nodo — ver la propuesta de
+#  pgcrypto en el issue #1.
+# ---------------------------------------------------------------------
+SIN_GUARDAR = {"tes/validar-token", "tes/tesoreria", "tes/auth",
+               "tes/respaldo", "tes/vigia"}
 # Los correos NO viven aquí: salen de la tabla config_app. Este
 # repositorio es público, y un correo personal es dato personal aunque no
 # sea un secreto — y borrarlo de un archivo no lo borra del historial.
@@ -67,7 +109,7 @@ def n_code(wf, nombre, archivo, pos):
 
 def n_webhook(wf, ruta, pos):
     return {"parameters": {"httpMethod": "POST", "path": ruta, "responseMode": "responseNode",
-                           "options": {"allowedOrigins": "*"}},
+                           "options": {"allowedOrigins": ORIGEN_PAGES}},
             "id": nid(wf, 'Webhook'), "name": "Webhook", "type": "n8n-nodes-base.webhook",
             "typeVersion": 2.1, "position": pos, "webhookId": nid(wf, 'hook')}
 
@@ -82,7 +124,7 @@ def n_pg(wf, nombre, pos, query="={{ $json.sql }}", params="={{ $json.params }}"
 def n_respond(wf, pos):
     return {"parameters": {"respondWith": "json", "responseBody": "={{ JSON.stringify($json) }}",
                            "options": {"responseHeaders": {"entries": [
-                               {"name": "Access-Control-Allow-Origin", "value": "*"},
+                               {"name": "Access-Control-Allow-Origin", "value": ORIGEN_PAGES},
                                {"name": "Cache-Control", "value": "no-store"}]}}},
             "id": nid(wf, 'Responder'), "name": "Respond to Webhook",
             "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.5, "position": pos}
@@ -125,9 +167,12 @@ def wf(nombre, descripcion, nodos, activo=False):
         # aquí para que se vea cuál debe ser, pero hay que ponerlo a mano
         # en la UI (Settings -> Timezone). Si no, los cron corren en el
         # huso de la instancia, que NO es el de Monterrey.
-        "settings": {"executionOrder": "v1", "timezone": "America/Monterrey",
-                     "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all",
-                     "saveManualExecutions": True},
+        "settings": dict(
+            {"executionOrder": "v1", "timezone": "America/Monterrey",
+             "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all",
+             "saveManualExecutions": True},
+            **({"saveDataErrorExecution": "none", "saveDataSuccessExecution": "none",
+                "saveManualExecutions": False} if nombre in SIN_GUARDAR else {})),
         "meta": {"descripcion": descripcion},
         "pinData": {}
     }

@@ -24,6 +24,11 @@ if (!s.ok) {
 /* $1 ciclo_id · $2 rol · $3 grupo_id · $4 ve_todos_los_grupos
    Una mamá ve los eventos de generación MÁS los de su propio grupo.
    Nunca los de otro grupo. Eso es exactamente lo que dice esta línea. */
+// Un solo sitio donde se normalizan los permisos. Antes se leían de
+// `s.permisos` directo en cuatro líneas, y bastaba que faltara el objeto
+// para que la consulta lanzara en vez de devolver una sesión sin nada.
+const perm = s.permisos || {};
+
 const VISIBLE = (t) =>
   `($2::text = 'admin' OR $4::boolean OR ${t}.tipo = 'generacion' OR ${t}.grupo_id = $3::bigint)`;
 
@@ -139,13 +144,14 @@ return [{ json: {
   ok: true,
   sql: sql,
   params: [
-    s.ciclo_id, s.rol, s.grupo_id, s.permisos.ver_todos_los_grupos === true,
+    s.ciclo_id, s.rol, s.grupo_id, perm.ver_todos_los_grupos === true,
     JSON.stringify({
       u: s.usuario, nom: s.nombre, rol: s.rol,
       salon: s.grupo_id === null ? null : String(s.grupo_id),
-      tickets: s.permisos.tickets,
-      verPres: s.permisos.ver_presupuesto,
-      verTodos: s.permisos.ver_todos_los_grupos
+      // Los tres con `=== true`: lo que no venga explícito va apagado.
+      tickets: perm.tickets === true,
+      verPres: perm.ver_presupuesto === true,
+      verTodos: perm.ver_todos_los_grupos === true
     })
   ]
 } }];

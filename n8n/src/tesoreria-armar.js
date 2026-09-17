@@ -15,7 +15,21 @@ const d = pet.datos || {};
 
 const no = (err) => [{ json: { ok: false, error: err, sql: 'SELECT 0 AS afectadas WHERE false', params: [] } }];
 if (!s.ok) return no(s.error || 'NO_AUTORIZADO');
-if (s.rol === 'mama') return no('ROL_SIN_PERMISO');
+
+// Sigue solo quien está en la lista. Escrito así y no como
+// `if (s.rol === 'mama') rechaza` para que un rol nuevo —o un rol
+// ausente— quede FUERA por omisión, no dentro.
+if (!(s.rol === 'admin' || s.rol === 'rep')) return no('ROL_SIN_PERMISO');
+
+/* Los permisos se EXIGEN, nunca se descartan.
+ *
+ * La forma `if (x && x.y !== true) rechaza` no corre cuando x falta: un
+ * `permisos` vacío pasaba de largo. Es la misma forma del CHECK que
+ * devolvía NULL y dejaba pasar justo el caso que existía para atrapar.
+ * Aquí se escribe al revés: SIGUE solo si el permiso vale exactamente
+ * true; cualquier otra cosa —ausente, nulo, la cadena "true"— rechaza. */
+const tienePermiso = (llave) => !!(s.permisos && s.permisos[llave] === true);
+
 
 /* Se escribe contra el evento, así que el predicado vive en una
    subconsulta sobre eventos. 'e' es el alias del evento. */
@@ -114,7 +128,7 @@ switch (pet.accion) {
      quita el ticket (y los cuatro campos se van juntos, que es lo que
      exige gastos_ticket_ok). */
   case 'ticket_fijar':
-    if (s.permisos && s.permisos.tickets !== true) return no('SIN_PERMISO_TICKETS');
+    if (!tienePermiso('tickets')) return no('SIN_PERMISO_TICKETS');
     sql = `
       WITH antes AS (SELECT to_jsonb(g.*) AS j FROM gastos g WHERE g.id = $7::bigint)
       , upd AS (
@@ -138,7 +152,7 @@ switch (pet.accion) {
   case 'ticket_subir_url':
   case 'ticket_ver_url': {
     const subir = pet.accion === 'ticket_subir_url';
-    if (subir && s.permisos && s.permisos.tickets !== true) return no('SIN_PERMISO_TICKETS');
+    if (subir && !tienePermiso('tickets')) return no('SIN_PERMISO_TICKETS');
     sql = `
       SELECT g.id AS gasto_id, g.ticket_key,
              -- De config_app, NO de config: app_rw no alcanza el

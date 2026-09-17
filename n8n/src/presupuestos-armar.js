@@ -21,7 +21,10 @@ const d = pet.datos || {};
 
 const no = (err) => [{ json: { ok: false, error: err, sql: 'SELECT 0 AS afectadas WHERE false', params: [] } }];
 if (!s.ok) return no(s.error || 'NO_AUTORIZADO');
-if (s.rol === 'mama') return no('ROL_SIN_PERMISO');
+// Sigue solo quien está en la lista. Escrito así y no como
+// `if (s.rol === 'mama') rechaza` para que un rol nuevo —o un rol
+// ausente— quede FUERA por omisión, no dentro.
+if (!(s.rol === 'admin' || s.rol === 'rep')) return no('ROL_SIN_PERMISO');
 
 /* Quién puede EDITAR un presupuesto. Copia fiel de puedeEditarPres()
    del navegador, pero aquí es la que manda:

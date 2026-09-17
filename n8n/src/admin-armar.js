@@ -267,9 +267,13 @@ switch (pet.accion) {
    se convierta en un error de base en vez de un valor por omisión. */
 function permisos(p) {
   const o = p && typeof p === 'object' ? p : {};
+  // Los TRES con `=== true`. Antes ver_presupuesto usaba `!== false`, o
+  // sea que un parche vacío lo dejaba encendido. Es la misma forma que
+  // deja pasar lo que no se menciona, y la pantalla siempre manda las
+  // tres llaves, así que no cuesta nada cerrarla.
   return {
     tickets: o.tickets === true,
-    ver_presupuesto: o.ver_presupuesto !== false,
+    ver_presupuesto: o.ver_presupuesto === true,
     ver_todos_los_grupos: o.ver_todos_los_grupos === true
   };
 }

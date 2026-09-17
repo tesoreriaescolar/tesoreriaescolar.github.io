@@ -165,9 +165,9 @@
   "settings": {
     "executionOrder": "v1",
     "timezone": "America/Monterrey",
-    "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all",
-    "saveManualExecutions": true
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false
   },
   "meta": {
     "descripcion": "Cron 3:00 am. Vuelca las nueve tablas a JSON y lo manda por correo con los movimientos del dia. La CLABE va enmascarada (ultimos 4) y los hashes no se incluyen. Las fotos NO van: solo sus llaves. Escribe su propio renglon de bitacora, que es lo que mira el vigia."

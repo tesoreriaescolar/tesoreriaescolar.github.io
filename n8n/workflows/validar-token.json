@@ -161,9 +161,9 @@
   "settings": {
     "executionOrder": "v1",
     "timezone": "America/Monterrey",
-    "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all",
-    "saveManualExecutions": true
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false
   },
   "meta": {
     "descripcion": "Subflujo. EL UNICO LUGAR DEL SISTEMA DONDE SE MATERIALIZA EL SECRETO DEL JWT. Dos modos: verificar (token -> quien es y que puede) y firmar (persona -> token). Los cinco workflows de API lo llaman al entrar; tes/auth lo llama para firmar. Es el unico que usa la credencial config_ro. NO se activa: se llama como sub-workflow."
