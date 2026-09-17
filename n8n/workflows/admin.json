@@ -253,9 +253,9 @@
   "settings": {
     "executionOrder": "v1",
     "timezone": "America/Monterrey",
-    "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all",
-    "saveManualExecutions": true
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false
   },
   "meta": {
     "descripcion": "Personas, membresias, permisos, ciclos, grupos y el pasar de ano. Solo rol admin. Pasar de ano crea el ciclo nuevo y copia las personas SIN activarlo ni tocar el viejo."

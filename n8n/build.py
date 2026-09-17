@@ -46,15 +46,40 @@ ORIGEN_PAGES = "https://tesoreriaescolar.github.io"
 #  devuelve se escribe tal cual en la base de n8n. O sea que un nodo que
 #  devuelve un secreto lo escribe EN CLARO, en cada petición.
 #
-#  Los cinco, y qué se guardaba de cada uno:
+#  🔴 ESTA LISTA ESTUVO MAL, y el criterio con el que se armó es la
+#  lección. Se preguntó «¿por aquí pasa un SECRETO DE INFRAESTRUCTURA?»
+#  —el secreto del JWT, las llaves del bucket, un hash, el volcado— y con
+#  esa vara tes/lectura, tes/presupuestos y tes/admin salieron limpios y
+#  se quedaron GUARDANDO. Estuvieron así en producción desde el 17-sep
+#  05:40 hasta las 07:17 del mismo día (ver el issue #1).
+#
+#  La pregunta correcta es otra: «¿por aquí pasa algo de una PERSONA?».
+#  Y la respuesta es que sí, en los cinco de API sin excepción, porque
+#  EL TOKEN DE SESIÓN VIAJA EN EL CUERPO DE CADA PETICIÓN. El nodo
+#  Webhook lo devuelve como salida, y con el guardado encendido queda
+#  escrito en claro, con ocho horas de vida por delante. tes/admin
+#  además lleva el revuelto de las contraseñas en persona_crear y
+#  persona_clave — que la lista vieja le atribuía solo a tes/auth,
+#  olvidando que admin también ESCRIBE hashes.
+#
+#  Qué se guardaba de cada uno:
 #    tes/validar-token  el secreto del JWT, en CADA petición del sistema
 #    tes/tesoreria      s3_key_id y s3_secret, en cada acción de ticket
 #    tes/auth           el hash de la persona, en cada intento de login
+#    tes/lectura        el token de sesión de quien llama
+#    tes/presupuestos   el token de sesión de quien llama
+#    tes/admin          el token, y el revuelto de las contraseñas que
+#                       se crean o se restablecen
 #    tes/respaldo       la base ENTERA: CLABEs SIN enmascarar y todos los
 #                       hashes. El enmascarado ocurre en el nodo
 #                       SIGUIENTE, así que lo que se guardaba era el
 #                       volcado crudo, cada noche
 #    tes/vigia          un correo personal
+#
+#  ⚠️ Regla para el que venga: en este sistema NINGÚN workflow guarda
+#  ejecuciones. No hay que decidir cuál sí — decidir caso por caso es
+#  exactamente lo que falló. Si algún día nace uno que de verdad no toque
+#  nada de nadie, que se argumente ahí mismo por escrito.
 #
 #  ⚠️ saveManualExecutions TAMBIÉN va en false, y no es un detalle: se
 #  rige por su propia bandera. Una corrida a mano desde la UI —que es
@@ -72,8 +97,9 @@ ORIGEN_PAGES = "https://tesoreriaescolar.github.io"
 #  el secreto no sea nunca la salida de un nodo — ver la propuesta de
 #  pgcrypto en el issue #1.
 # ---------------------------------------------------------------------
-SIN_GUARDAR = {"tes/validar-token", "tes/tesoreria", "tes/auth",
-               "tes/respaldo", "tes/vigia"}
+SIN_GUARDAR = {"tes/validar-token", "tes/auth", "tes/lectura",
+               "tes/presupuestos", "tes/tesoreria", "tes/admin",
+               "tes/respaldo", "tes/vigia"}   # = los ocho, a propósito
 # Los correos NO viven aquí: salen de la tabla config_app. Este
 # repositorio es público, y un correo personal es dato personal aunque no
 # sea un secreto — y borrarlo de un archivo no lo borra del historial.
@@ -224,12 +250,16 @@ def wf(nombre, descripcion, nodos, activo=False):
         # aquí para que se vea cuál debe ser, pero hay que ponerlo a mano
         # en la UI (Settings -> Timezone). Si no, los cron corren en el
         # huso de la instancia, que NO es el de Monterrey.
+        # El valor por omisión aquí es NO GUARDAR, al revés que en n8n.
+        # Importa el sentido: en n8n, no decidir deja el guardado
+        # ENCENDIDO, así que un workflow nuevo nace expuesto por olvido.
+        # Aquí un workflow nuevo nace cerrado, y abrirlo cuesta escribirlo.
         "settings": dict(
             {"executionOrder": "v1", "timezone": "America/Monterrey",
-             "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all",
-             "saveManualExecutions": True},
-            **({"saveDataErrorExecution": "none", "saveDataSuccessExecution": "none",
-                "saveManualExecutions": False} if nombre in SIN_GUARDAR else {})),
+             "saveDataErrorExecution": "none", "saveDataSuccessExecution": "none",
+             "saveManualExecutions": False},
+            **({"saveDataErrorExecution": "all", "saveDataSuccessExecution": "all",
+                "saveManualExecutions": True} if nombre not in SIN_GUARDAR else {})),
         "meta": {"descripcion": descripcion},
         "pinData": {}
     }

@@ -101,12 +101,28 @@ No basta con que el nodo no lance. En el camino feliz, lo que un nodo
 devuelve se escribe tal cual en la base de n8n para cada ejecución que se
 conserve. Un nodo que devuelve un secreto lo guarda **en cada petición**.
 
-Por eso cinco workflows llevan `saveDataSuccessExecution`,
-`saveDataErrorExecution` **y `saveManualExecutions`** cerrados:
-`tes/validar-token` (el secreto del JWT), `tes/tesoreria` (las llaves del
-bucket), `tes/auth` (el hash de quien entra), `tes/respaldo` (la base
-entera, con las CLABEs **sin** enmascarar — el enmascarado ocurre en el
-nodo siguiente) y `tes/vigia` (un correo).
+Por eso **los ocho** llevan `saveDataSuccessExecution`,
+`saveDataErrorExecution` **y `saveManualExecutions`** cerrados. Los ocho,
+sin excepciones y a propósito.
+
+🔴 **Aquí decía «cinco», y esa lista estuvo mal en producción.** El
+criterio con el que se armó era «¿por aquí pasa un secreto de
+infraestructura?» — el secreto del JWT, las llaves del bucket, un hash, el
+volcado de la base, un correo. Con esa vara, `tes/lectura`,
+`tes/presupuestos` y `tes/admin` salieron limpios y se quedaron
+**guardando** desde el 17-sep 05:40 hasta las 07:17 del mismo día.
+
+**La pregunta correcta es otra: «¿por aquí pasa algo de una persona?».**
+Y la respuesta es que sí, en los cinco de API sin excepción, porque **el
+token de sesión viaja en el cuerpo de cada petición**: el nodo `Webhook`
+lo devuelve como salida, y con el guardado encendido queda escrito en
+claro, con ocho horas de vida por delante. `tes/admin` además lleva el
+revuelto de las contraseñas en `persona_crear` y `persona_clave` — que la
+lista vieja le atribuía solo a `tes/auth`, olvidando que admin también
+**escribe** hashes.
+
+De ahí la regla: **ninguno guarda**. No hay que decidir cuál sí; decidir
+caso por caso es exactamente lo que falló.
 
 ⚠️ `saveManualExecutions` va por su cuenta: una corrida a mano desde la UI
 guarda todo aunque las otras dos digan `none`. Y es justo lo que se hace
@@ -115,6 +131,15 @@ al importar y probar.
 ⚠️ Y esto es un **ajuste**, no una propiedad del diseño: quien lo cambie
 en la UI reabre el hoyo sin que nada avise. El arreglo estructural es que
 el secreto no sea nunca la salida de un nodo.
+
+**Cómo comprobarlo sin abrir la configuración de nada.** Si un workflow
+guarda, sus ejecuciones **aparecen en la lista**; si no guarda, **no
+aparece ninguna**, ni siquiera el renglón. Medido el 17-sep: `tes/auth`
+(apagado) → **0 ejecuciones** aunque se había entrado a la aplicación
+muchas veces; `tes/presupuestos` (encendido) → **36**. Así que entrar a
+**Overview → Executions** y filtrar por workflow mide el efecto, no el
+ajuste: **cualquier ejecución de un `tes/*` significa que su guardado
+está encendido.**
 
 **6-bis. 🔴 Cero filas = cero items = el webhook cierra VACÍO.**
 Cuando una consulta devuelve **cero filas**, el nodo de Postgres emite
