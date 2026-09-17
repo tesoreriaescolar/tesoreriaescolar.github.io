@@ -1,0 +1,263 @@
+{
+  "name": "tes/admin",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tes/admin",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://tesoreriaescolar.github.io"
+        }
+      },
+      "id": "0d9c5c5f-4123-4153-85a0-4f2b59cd816c",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "58db2c64-27f8-429b-8b07-b40e4d338603"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/* Nodo: \"Code - Leer petición\"  (los cinco workflows de API)\n\n   Saca del cuerpo lo mínimo y nada más. No decide nada: quién es y qué\n   puede hacer lo resuelve tes/validar-token en el nodo siguiente.\n\n   La IP se toma de las cabeceras para la bitácora. Es informativa: la\n   manda el cliente y se puede mentir, por eso NO se usa para ninguna\n   decisión, solo se guarda. */\n\nlet salida;\ntry {\n  const w = $input.first().json || {};\n  const b = w.body || {};\n  const h = w.headers || {};\n  const ip = String(h['x-forwarded-for'] || h['x-real-ip'] || '').split(',')[0].trim();\n\n  salida = {\n    token: String(b.token || ''),\n    accion: String(b.accion || ''),\n    datos: (b.datos && typeof b.datos === 'object') ? b.datos : {},\n    ip: ip\n  };\n} catch (e) {\n  salida = { token: '', accion: '', datos: {}, ip: '' };\n}\nreturn [{ json: salida }];\n"
+      },
+      "id": "c65671bc-615b-4102-8d50-90dc851450eb",
+      "name": "Code - Leer petición",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REEMPLAZAR_ID_VALIDAR_TOKEN"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "modo": "verificar",
+            "token": "={{ $json.token }}",
+            "persona_id": 0
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "modo",
+              "displayName": "modo",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "token",
+              "displayName": "token",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "persona_id",
+              "displayName": "persona_id",
+              "type": "number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "8fad3af0-15b9-468b-871d-8d87a919095a",
+      "name": "Validar token",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/* Nodo: \"Code - Armar consulta\"  (workflow tes/admin)\n\n   Personas, membresías, permisos, ciclos, grupos y el \"pasar de año\".\n   TODO aquí es de la tesorera general.\n\n   El corte se hace dos veces a propósito: aquí arriba, para no armar\n   siquiera la consulta, y otra vez dentro de cada WHERE. La de arriba\n   ahorra trabajo; la del WHERE es la que cuenta. */\n\nconst s = $input.first().json || {};\nconst pet = $('Code - Leer petición').first().json || {};\nconst d = pet.datos || {};\n\nconst no = (err) => [{ json: { ok: false, error: err, sql: 'SELECT 0 AS afectadas WHERE false', params: [] } }];\nif (!s.ok) return no(s.error || 'NO_AUTORIZADO');\nif (s.rol !== 'admin') return no('SOLO_ADMIN');\n\nconst ADMIN = `$2::text = 'admin'`;\nconst LOG = (accion, tabla) => `\n  , log AS (\n      SELECT bitacora_escribir($1::bigint, '${accion}', '${tabla}', u.id,\n                               (SELECT j FROM antes), u.j, $4::text) AS bid\n        FROM upd u\n    )`;\nconst CIERRE = `SELECT (SELECT count(*) FROM upd) AS afectadas,\n                       (SELECT max(id) FROM upd)  AS id,\n                       (SELECT count(*) FROM log) AS logs`;\n\nconst base = [s.persona_id, s.rol, s.grupo_id, pet.ip || null, s.ciclo_id];\nlet sql, params;\n\nswitch (pet.accion) {\n\n  /* Crea la persona Y su membresía del ciclo activo en una sentencia.\n     Una persona sin membresía no puede entrar (validar-token devuelve\n     SIN_MEMBRESIA_EN_CICLO), así que crearla suelta sería crear una\n     cuenta muerta. */\n  case 'persona_crear':\n    sql = `\n      WITH antes AS (SELECT NULL::jsonb AS j)\n      , nueva AS (\n          INSERT INTO personas (nombre, usuario, hash)\n          SELECT $6::text, upper(btrim($7::text)), $8::text\n           WHERE ${ADMIN} AND btrim($6::text) <> '' AND btrim($7::text) <> ''\n             AND $8::text LIKE 'pbkdf2$%'\n          RETURNING id, to_jsonb(personas.*) AS j\n        )\n      , upd AS (\n          INSERT INTO membresias (persona_id, ciclo_id, grupo_id, rol, permisos, activo)\n          SELECT n.id, $5::bigint, $9::bigint, $10::text, $11::jsonb, true\n            FROM nueva n\n          RETURNING persona_id AS id, to_jsonb(membresias.*) AS j\n        )${LOG('persona_crear', 'personas')}\n      ${CIERRE}`;\n    params = base.concat([\n      String(d.nombre || ''), String(d.usuario || ''), String(d.hash || ''),\n      d.rol === 'admin' ? null : d.grupo_id,\n      d.rol || 'mama', JSON.stringify(permisos(d.permisos))\n    ]);\n    break;\n\n  /* Cambia rol, grupo, permisos o el activo de una membresía.\n     El candado importante es el de la última línea: NADIE se edita a sí\n     mismo. En el prototipo esto estaba amarrado al literal 'ADMIN'\n     (línea 858); aquí se compara contra el persona_id del TOKEN, que es\n     lo que de verdad identifica a quien pide. Sin esto, la tesorera\n     general puede degradarse por error y dejar el sistema sin nadie que\n     pueda arreglarlo. */\n  case 'membresia_editar':\n    sql = `\n      WITH antes AS (\n        SELECT to_jsonb(m.*) AS j FROM membresias m\n         WHERE m.persona_id = $6::bigint AND m.ciclo_id = $5::bigint\n      )\n      , upd AS (\n          UPDATE membresias m SET\n            rol      = COALESCE($7::text,   m.rol),\n            grupo_id = CASE WHEN COALESCE($7::text, m.rol) = 'admin' THEN NULL\n                            ELSE COALESCE($8::bigint, m.grupo_id) END,\n            permisos = COALESCE($9::jsonb,  m.permisos),\n            activo   = COALESCE($10::boolean, m.activo)\n          WHERE m.persona_id = $6::bigint AND m.ciclo_id = $5::bigint AND ${ADMIN}\n            AND m.persona_id <> $1::bigint\n          RETURNING m.persona_id AS id, to_jsonb(m.*) AS j\n        )${LOG('membresia_editar', 'membresias')}\n      ${CIERRE}`;\n    params = base.concat([\n      d.persona_id, d.rol || null,\n      d.grupo_id === undefined ? null : d.grupo_id,\n      d.permisos === undefined ? null : JSON.stringify(permisos(d.permisos)),\n      d.activo === undefined ? null : !!d.activo\n    ]);\n    break;\n\n  /* Cambiar la contraseña de otra persona. El hash llega YA CALCULADO\n     desde tes/auth; aquí nunca pasa una contraseña en claro. */\n  case 'persona_clave':\n    sql = `\n      WITH antes AS (SELECT jsonb_build_object('hash','(oculto)') AS j)\n      , upd AS (\n          UPDATE personas p SET hash = $7::text\n           WHERE p.id = $6::bigint AND ${ADMIN} AND $7::text LIKE 'pbkdf2$%'\n             AND EXISTS (SELECT 1 FROM membresias m\n                          WHERE m.persona_id = p.id AND m.ciclo_id = $5::bigint)\n          RETURNING p.id, jsonb_build_object('hash','(cambiado)') AS j\n        )${LOG('persona_clave', 'personas')}\n      ${CIERRE}`;\n    params = base.concat([d.persona_id, String(d.hash || '')]);\n    break;\n\n  case 'grupo_crear':\n    sql = `\n      WITH antes AS (SELECT NULL::jsonb AS j)\n      , upd AS (\n          INSERT INTO grupos (ciclo_id, letra, nombre, color, orden)\n          SELECT COALESCE($6::bigint, $5::bigint), upper(btrim($7::text)),\n                 btrim($8::text), $9::text, COALESCE($10::int, 99)\n           WHERE ${ADMIN}\n          RETURNING id, to_jsonb(grupos.*) AS j\n        )${LOG('grupo_crear', 'grupos')}\n      ${CIERRE}`;\n    params = base.concat([d.ciclo_id || null, String(d.letra || ''), String(d.nombre || ''),\n                          String(d.color || '#4C6EF5'), d.orden === undefined ? null : Number(d.orden)]);\n    break;\n\n  case 'grupo_editar':\n    sql = `\n      WITH antes AS (SELECT to_jsonb(g.*) AS j FROM grupos g WHERE g.id = $6::bigint)\n      , upd AS (\n          UPDATE grupos g SET\n            nombre = COALESCE(NULLIF(btrim($7::text), ''), g.nombre),\n            color  = COALESCE($8::text, g.color),\n            orden  = COALESCE($9::int,  g.orden)\n          WHERE g.id = $6::bigint AND ${ADMIN}\n          RETURNING g.id, to_jsonb(g.*) AS j\n        )${LOG('grupo_editar', 'grupos')}\n      ${CIERRE}`;\n    params = base.concat([d.grupo_id, d.nombre === undefined ? null : String(d.nombre),\n                          d.color === undefined ? null : String(d.color),\n                          d.orden === undefined ? null : Number(d.orden)]);\n    break;\n\n  /* Borrar un grupo solo si está VACÍO. Las llaves foráneas son\n     RESTRICT, así que la base lo impediría de todos modos; el NOT\n     EXISTS está para que la respuesta sea un rechazo limpio y no el\n     texto de un error de llave foránea. */\n  case 'grupo_eliminar':\n    sql = `\n      WITH antes AS (SELECT to_jsonb(g.*) AS j FROM grupos g WHERE g.id = $6::bigint)\n      , upd AS (\n          DELETE FROM grupos g\n           WHERE g.id = $6::bigint AND ${ADMIN}\n             AND NOT EXISTS (SELECT 1 FROM membresias   m WHERE m.grupo_id = g.id)\n             AND NOT EXISTS (SELECT 1 FROM presupuestos p WHERE p.grupo_id = g.id\n                                                             OR p.prestado_a_grupo_id = g.id)\n             AND NOT EXISTS (SELECT 1 FROM eventos      e WHERE e.grupo_id = g.id)\n             AND NOT EXISTS (SELECT 1 FROM evento_grupo x WHERE x.grupo_id = g.id)\n          RETURNING g.id, to_jsonb(g.*) AS j\n        )${LOG('grupo_eliminar', 'grupos')}\n      ${CIERRE}`;\n    params = base.concat([d.grupo_id]);\n    break;\n\n  case 'ciclo_crear':\n    sql = `\n      WITH antes AS (SELECT NULL::jsonb AS j)\n      , upd AS (\n          INSERT INTO ciclos (nombre, grado, activo)\n          SELECT btrim($6::text), btrim($7::text), false\n           WHERE ${ADMIN} AND btrim($6::text) <> '' AND btrim($7::text) <> ''\n          RETURNING id, to_jsonb(ciclos.*) AS j\n        )${LOG('ciclo_crear', 'ciclos')}\n      ${CIERRE}`;\n    params = base.concat([String(d.nombre || ''), String(d.grado || '')]);\n    break;\n\n  /* Cambiar el ciclo activo. Va en dos CTE y no en un solo UPDATE\n     porque el índice ciclos_un_solo_activo no perdona ni un instante\n     con dos activos; probado contra Postgres, las dos formas pasan y\n     ésta además deja el RETURNING que necesita la bitácora. */\n  case 'ciclo_activar':\n    sql = `\n      WITH antes AS (SELECT to_jsonb(c.*) AS j FROM ciclos c WHERE c.id = $6::bigint)\n      , apaga AS (\n          UPDATE ciclos SET activo = false\n           WHERE activo AND id <> $6::bigint AND ${ADMIN}\n          RETURNING id\n        )\n      , upd AS (\n          UPDATE ciclos c SET activo = true\n           WHERE c.id = $6::bigint AND ${ADMIN}\n             AND EXISTS (SELECT 1 FROM grupos g WHERE g.ciclo_id = c.id)\n             AND EXISTS (SELECT 1 FROM membresias m\n                          WHERE m.ciclo_id = c.id AND m.rol = 'admin' AND m.activo)\n          RETURNING c.id, to_jsonb(c.*) AS j\n        )${LOG('ciclo_activar', 'ciclos')}\n      SELECT (SELECT count(*) FROM upd) AS afectadas,\n             (SELECT max(id) FROM upd)  AS id,\n             (SELECT count(*) FROM log) AS logs,\n             (SELECT count(*) FROM apaga) AS apagados`;\n    params = base.concat([d.ciclo_id]);\n    break;\n\n  /* PASAR DE AÑO. Todo en una sentencia:\n       1. crea el ciclo nuevo (INACTIVO)\n       2. copia los grupos del ciclo actual, con su color y su orden,\n          renombrando el prefijo del grado (PS3A -> PS4A)\n       3. copia las membresías ACTIVAS, cada quien al grupo de la misma\n          letra, conservando rol y permisos\n\n     Lo que NO hace, a propósito: NO activa el ciclo nuevo y NO toca\n     nada del viejo. Los presupuestos, eventos y gastos del año pasado\n     se quedan donde están, colgados de su ciclo — que es exactamente\n     \"sin perder el historial\". Reasignas grupos y roles con calma, y\n     cuando esté listo lo activas con ciclo_activar. */\n  case 'pasar_de_ano':\n    sql = `\n      WITH antes AS (SELECT NULL::jsonb AS j)\n      , nuevo AS (\n          INSERT INTO ciclos (nombre, grado, activo)\n          SELECT btrim($6::text), btrim($7::text), false\n           WHERE ${ADMIN} AND btrim($6::text) <> '' AND btrim($7::text) <> ''\n             AND NOT EXISTS (SELECT 1 FROM ciclos c WHERE c.nombre = btrim($6::text))\n          RETURNING id, grado\n        )\n      , gr AS (\n          INSERT INTO grupos (ciclo_id, letra, nombre, color, orden)\n          SELECT n.id, g.letra,\n                 -- PS3A con grado nuevo PS4 queda PS4A. Si el nombre no\n                 -- empieza con el grado viejo, se deja tal cual y tú lo\n                 -- corriges en Configuración: adivinar de más aquí\n                 -- produce nombres raros que nadie entiende de dónde\n                 -- salieron.\n                 CASE WHEN g.nombre LIKE c.grado || '%'\n                      THEN n.grado || substr(g.nombre, length(c.grado) + 1)\n                      ELSE g.nombre END,\n                 g.color, g.orden\n            FROM nuevo n\n            CROSS JOIN ciclos c\n            JOIN grupos g ON g.ciclo_id = c.id\n           WHERE c.id = $5::bigint\n          RETURNING id, ciclo_id, letra\n        )\n      , upd AS (\n          INSERT INTO membresias (persona_id, ciclo_id, grupo_id, rol, permisos, activo)\n          SELECT m.persona_id, n.id,\n                 (SELECT x.id FROM gr x WHERE x.letra = vg.letra),\n                 m.rol, m.permisos, true\n            FROM nuevo n\n            JOIN membresias m ON m.ciclo_id = $5::bigint AND m.activo\n            LEFT JOIN grupos vg ON vg.id = m.grupo_id\n          RETURNING persona_id AS id, to_jsonb(membresias.*) AS j\n        )${LOG('pasar_de_ano', 'ciclos')}\n      SELECT (SELECT count(*) FROM upd)   AS afectadas,\n             (SELECT max(id)  FROM nuevo) AS id,\n             (SELECT count(*) FROM log)   AS logs,\n             (SELECT count(*) FROM gr)    AS grupos_copiados`;\n    params = base.concat([String(d.nombre || ''), String(d.grado || '')]);\n    break;\n\n  default:\n    return no('ACCION_DESCONOCIDA');\n}\n\n/* Las tres llaves SIEMPRE, y siempre booleanas. La restricción\n   membresias_permisos_ok las exige; esto evita que un parche a medias\n   se convierta en un error de base en vez de un valor por omisión. */\nfunction permisos(p) {\n  const o = p && typeof p === 'object' ? p : {};\n  // Los TRES con `=== true`. Antes ver_presupuesto usaba `!== false`, o\n  // sea que un parche vacío lo dejaba encendido. Es la misma forma que\n  // deja pasar lo que no se menciona, y la pantalla siempre manda las\n  // tres llaves, así que no cuesta nada cerrarla.\n  return {\n    tickets: o.tickets === true,\n    ver_presupuesto: o.ver_presupuesto === true,\n    ver_todos_los_grupos: o.ver_todos_los_grupos === true\n  };\n}\n\nreturn [{ json: { ok: true, sql: sql, params: params } }];\n"
+      },
+      "id": "1ba29c17-cbf1-4bd4-8bed-422308fe6b1d",
+      "name": "Code - Armar consulta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {
+          "queryReplacement": "={{ $json.params }}",
+          "queryBatching": "single",
+          "largeNumbersOutput": "numbers"
+        }
+      },
+      "id": "27051e17-d572-4691-8192-7124cf20c70a",
+      "name": "Postgres - Ejecutar",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        800,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REEMPLAZAR_CRED_APP_RW",
+          "name": "tesoreria-db · app_rw"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/* Nodo: \"Code - Responder\"  (los cinco workflows de API)\n\n   Convierte el resultado de Postgres en la respuesta del webhook.\n\n   Regla: los errores que salen hacia afuera son ETIQUETAS, no el texto\n   del error de Postgres. Un mensaje de la base cuenta nombres de tablas,\n   de columnas y de restricciones a quien no tiene por qué saberlos. El\n   detalle se queda en el historial de ejecuciones de n8n. */\n\nlet salida;\ntry {\n  const arm = $('Code - Armar consulta').first().json || {};\n\n  if (!arm.ok) {\n    salida = { ok: false, error: arm.error || 'NO_AUTORIZADO' };\n  } else {\n    const fila = $input.first().json || {};\n\n    // 'afectadas' la devuelven las mutaciones; 'datos' las lecturas.\n    if (Object.prototype.hasOwnProperty.call(fila, 'afectadas')) {\n      const n = Number(fila.afectadas || 0);\n      salida = n > 0\n        ? { ok: true, afectadas: n, id: fila.id === undefined ? null : String(fila.id) }\n        // Cero renglones tocados con sesión válida significa que el\n        // WHERE excluyó el renglón: o no existe, o no es suyo. A quien\n        // pregunta se le dice lo mismo en los dos casos, a propósito:\n        // distinguirlos le confirmaría que el renglón existe.\n        : { ok: false, error: 'NO_PERMITIDO_O_NO_EXISTE' };\n    } else {\n      salida = { ok: true, datos: fila.datos === undefined ? null : fila.datos };\n    }\n  }\n} catch (e) {\n  salida = { ok: false, error: 'RESPUESTA_FALLO' };\n}\nreturn [{ json: salida }];\n"
+      },
+      "id": "b8360201-77a8-4c21-804e-ef4f628672aa",
+      "name": "Code - Responder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://tesoreriaescolar.github.io"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "id": "ed1977da-fbcd-4a16-8f20-f4a798ad1710",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1200,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code - Leer petición",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Leer petición": {
+      "main": [
+        [
+          {
+            "node": "Validar token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar token": {
+      "main": [
+        [
+          {
+            "node": "Code - Armar consulta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Armar consulta": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Ejecutar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Ejecutar": {
+      "main": [
+        [
+          {
+            "node": "Code - Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Responder": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Monterrey",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "meta": {
+    "descripcion": "Personas, membresias, permisos, ciclos, grupos y el pasar de ano. Solo rol admin. Pasar de ano crea el ciclo nuevo y copia las personas SIN activarlo ni tocar el viejo."
+  },
+  "pinData": {}
+}

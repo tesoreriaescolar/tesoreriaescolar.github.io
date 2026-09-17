@@ -1,0 +1,263 @@
+{
+  "name": "tes/presupuestos",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tes/presupuestos",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://tesoreriaescolar.github.io"
+        }
+      },
+      "id": "05c81115-a4c6-45d9-81a7-6f349a9c297c",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "9c037f12-dcc1-4002-8560-8e60e0963fb6"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/* Nodo: \"Code - Leer petición\"  (los cinco workflows de API)\n\n   Saca del cuerpo lo mínimo y nada más. No decide nada: quién es y qué\n   puede hacer lo resuelve tes/validar-token en el nodo siguiente.\n\n   La IP se toma de las cabeceras para la bitácora. Es informativa: la\n   manda el cliente y se puede mentir, por eso NO se usa para ninguna\n   decisión, solo se guarda. */\n\nlet salida;\ntry {\n  const w = $input.first().json || {};\n  const b = w.body || {};\n  const h = w.headers || {};\n  const ip = String(h['x-forwarded-for'] || h['x-real-ip'] || '').split(',')[0].trim();\n\n  salida = {\n    token: String(b.token || ''),\n    accion: String(b.accion || ''),\n    datos: (b.datos && typeof b.datos === 'object') ? b.datos : {},\n    ip: ip\n  };\n} catch (e) {\n  salida = { token: '', accion: '', datos: {}, ip: '' };\n}\nreturn [{ json: salida }];\n"
+      },
+      "id": "1c84ce5a-ccc1-4dab-82ac-fc167386c4d2",
+      "name": "Code - Leer petición",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REEMPLAZAR_ID_VALIDAR_TOKEN"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "modo": "verificar",
+            "token": "={{ $json.token }}",
+            "persona_id": 0
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "modo",
+              "displayName": "modo",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "token",
+              "displayName": "token",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "persona_id",
+              "displayName": "persona_id",
+              "type": "number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "2f3905b5-ffdc-48f2-8552-de2a4c8f926b",
+      "name": "Validar token",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/* Nodo: \"Code - Armar consulta\"  (workflow tes/presupuestos)\n\n   Un catálogo cerrado de acciones. El SQL de cada una es una CADENA\n   LITERAL de este archivo: lo único que viene del cliente son VALORES,\n   y viajan como $1, $2… Nada de lo que manda el navegador se concatena\n   nunca dentro del SQL.\n\n   Los tres invariantes que se cumplen aquí y no en el navegador:\n\n   1. El permiso va en el WHERE. Si el WHERE no deja pasar el renglón,\n      la consulta toca cero renglones y la respuesta es un rechazo.\n   2. El vencimiento del préstamo se mide contra now() del SERVIDOR.\n   3. Cada cambio escribe su bitácora en la MISMA sentencia. Una sola\n      sentencia es una sola transacción: si bitacora_escribir truena,\n      el UPDATE se va con ella. Por eso el SELECT final siempre\n      referencia el CTE 'log' — un CTE que nadie mira no se ejecuta. */\n\nconst s = $input.first().json || {};\nconst pet = $('Code - Leer petición').first().json || {};\nconst d = pet.datos || {};\n\nconst no = (err) => [{ json: { ok: false, error: err, sql: 'SELECT 0 AS afectadas WHERE false', params: [] } }];\nif (!s.ok) return no(s.error || 'NO_AUTORIZADO');\n// Sigue solo quien está en la lista. Escrito así y no como\n// `if (s.rol === 'mama') rechaza` para que un rol nuevo —o un rol\n// ausente— quede FUERA por omisión, no dentro.\nif (!(s.rol === 'admin' || s.rol === 'rep')) return no('ROL_SIN_PERMISO');\n\n/* Quién puede EDITAR un presupuesto. Copia fiel de puedeEditarPres()\n   del navegador, pero aquí es la que manda:\n     - la tesorera general, siempre\n     - la representante de ese grupo, si no está confirmado\n     - la representante a la que se lo prestaron, mientras el préstamo\n       siga vivo CONTRA now() DEL SERVIDOR                              */\nconst PUEDE_EDITAR = `(\n  $2::text = 'admin' OR (\n    $2::text = 'rep' AND p.estado = 'creacion' AND (\n      p.grupo_id = $3::bigint OR\n      (p.prestado_a_grupo_id = $3::bigint AND p.prestamo_hasta > now())\n    )\n  )\n)`;\n\n/* Quién puede CONFIRMAR o DEVOLVER.\n   Uno de generación solo lo confirma admin. Uno de salón lo confirma la\n   representante de ESE grupo, y por eso queda como tesorera del evento. */\nconst PUEDE_CONFIRMAR = `(\n  $2::text = 'admin' OR\n  (p.tipo = 'salon' AND $2::text = 'rep' AND p.grupo_id = $3::bigint)\n)`;\n\n/* Dueño del presupuesto: prestar y quitar préstamo. */\nconst ES_DUENO = `($2::text = 'admin' OR ($2::text = 'rep' AND p.grupo_id = $3::bigint))`;\n\n/* El total que se congela. Se calcula EN LA BASE a partir de los\n   conceptos guardados, no de un número que mande el navegador: si\n   viniera del cliente, el total congelado sería lo que el cliente\n   quiera que sea. */\nconst TOTAL = `(SELECT COALESCE(SUM((c->>'q')::numeric * (c->>'u')::numeric), 0)\n                  FROM jsonb_array_elements(p.conceptos) c)`;\n\nconst LOG = (accion, tabla) => `\n  , log AS (\n      SELECT bitacora_escribir($1::bigint, '${accion}', '${tabla}', u.id,\n                               (SELECT j FROM antes), u.j, $4::text) AS bid\n        FROM upd u\n    )`;\n\nconst CIERRE = `SELECT (SELECT count(*) FROM upd) AS afectadas,\n                       (SELECT max(id) FROM upd)   AS id,\n                       (SELECT count(*) FROM log)  AS logs`;\n\n// $1 persona_id · $2 rol · $3 grupo_id · $4 ip · $5 ciclo_id · $6+ datos\nconst base = [s.persona_id, s.rol, s.grupo_id, pet.ip || null, s.ciclo_id];\nlet sql, params;\n\nswitch (pet.accion) {\n\n  case 'crear': {\n    const tipo = d.tipo === 'salon' ? 'salon' : 'generacion';\n    const grupo = d.grupo_id;\n    if (!grupo) return no('FALTA_GRUPO');\n    sql = `\n      WITH antes AS (SELECT NULL::jsonb AS j)\n      , upd AS (\n          INSERT INTO presupuestos (ciclo_id, grupo_id, nombre, fecha, tipo, estado)\n          SELECT $5::bigint, $7::bigint, $6::text, $8::date, $9::text, 'creacion'\n           WHERE ($2::text = 'admin' OR ($2::text = 'rep' AND $7::bigint = $3::bigint))\n             AND EXISTS (SELECT 1 FROM grupos g WHERE g.id = $7::bigint AND g.ciclo_id = $5::bigint)\n          RETURNING id, to_jsonb(presupuestos.*) AS j\n        )${LOG('crear', 'presupuestos')}\n      ${CIERRE}`;\n    params = base.concat([String(d.nombre || ''), grupo, d.fecha || null, tipo]);\n    break;\n  }\n\n  case 'editar': {\n    // Un solo UPDATE con COALESCE: lo que no venga en el parche se\n    // queda como está. Así el mismo SQL sirve para el nombre, para los\n    // conteos y para los conceptos, sin armar SET dinámicos.\n    sql = `\n      WITH antes AS (SELECT to_jsonb(p.*) AS j FROM presupuestos p WHERE p.id = $6::bigint)\n      , upd AS (\n          UPDATE presupuestos p SET\n            nombre      = COALESCE($7::text,    p.nombre),\n            fecha       = COALESCE($8::date,    p.fecha),\n            responsable = COALESCE($9::text,    p.responsable),\n            ninos       = COALESCE($10::int,    p.ninos),\n            ninas       = COALESCE($11::int,    p.ninas),\n            adultos     = COALESCE($12::int,    p.adultos),\n            banco       = COALESCE($13::text,   p.banco),\n            clabe       = COALESCE($14::text,   p.clabe),\n            titular     = COALESCE($15::text,   p.titular),\n            conceptos   = COALESCE($16::jsonb,  p.conceptos),\n            actualizado_en = now()\n          WHERE p.id = $6::bigint AND p.ciclo_id = $5::bigint AND ${PUEDE_EDITAR}\n          RETURNING p.id, to_jsonb(p.*) AS j\n        )${LOG('editar', 'presupuestos')}\n      ${CIERRE}`;\n    params = base.concat([\n      d.id, nul(d.nombre), nul(d.fecha), nul(d.responsable),\n      nulNum(d.ninos), nulNum(d.ninas), nulNum(d.adultos),\n      nul(d.banco), nul(d.clabe), nul(d.titular),\n      d.conceptos === undefined ? null : JSON.stringify(d.conceptos)\n    ]);\n    break;\n  }\n\n  case 'eliminar':\n    sql = `\n      WITH antes AS (SELECT to_jsonb(p.*) AS j FROM presupuestos p WHERE p.id = $6::bigint)\n      , upd AS (\n          DELETE FROM presupuestos p\n           WHERE p.id = $6::bigint AND p.ciclo_id = $5::bigint AND ${PUEDE_EDITAR}\n             -- Un presupuesto con evento no se borra: se borraría el\n             -- historial de gastos junto con él.\n             AND NOT EXISTS (SELECT 1 FROM eventos e WHERE e.presupuesto_id = p.id)\n          RETURNING p.id, to_jsonb(p.*) AS j\n        )${LOG('eliminar', 'presupuestos')}\n      ${CIERRE}`;\n    params = base.concat([d.id]);\n    break;\n\n  case 'confirmar':\n    // Confirmar hace DOS cosas en una sola sentencia: marca el\n    // presupuesto y crea el evento con su total CONGELADO. Si algo de\n    // eso falla, no queda ni lo uno ni lo otro.\n    sql = `\n      WITH antes AS (SELECT to_jsonb(p.*) AS j FROM presupuestos p WHERE p.id = $6::bigint)\n      , upd AS (\n          UPDATE presupuestos p\n             SET estado = 'confirmado',\n                 prestado_a_grupo_id = NULL, prestamo_hasta = NULL,\n                 actualizado_en = now()\n           WHERE p.id = $6::bigint AND p.ciclo_id = $5::bigint\n             AND p.estado = 'creacion' AND ${PUEDE_CONFIRMAR}\n          RETURNING p.id, to_jsonb(p.*) AS j, p.nombre, p.fecha, p.tipo, p.grupo_id, ${TOTAL} AS total\n        )\n      , ev AS (\n          INSERT INTO eventos (presupuesto_id, nombre, fecha, tipo, grupo_id, total_congelado)\n          SELECT u.id, u.nombre, u.fecha, u.tipo,\n                 CASE WHEN u.tipo = 'salon' THEN u.grupo_id END,\n                 u.total\n            FROM upd u\n          -- Si ya había evento (doble clic en Confirmar), no se crea otro.\n          ON CONFLICT (presupuesto_id) DO NOTHING\n          RETURNING id\n        )${LOG('confirmar', 'presupuestos')}\n      SELECT (SELECT count(*) FROM upd) AS afectadas,\n             (SELECT max(id) FROM ev)   AS id,\n             (SELECT count(*) FROM log) AS logs`;\n    params = base.concat([d.id]);\n    break;\n\n  case 'devolver':\n    sql = `\n      WITH antes AS (SELECT to_jsonb(p.*) AS j FROM presupuestos p WHERE p.id = $6::bigint)\n      , upd AS (\n          UPDATE presupuestos p SET estado = 'creacion', actualizado_en = now()\n           WHERE p.id = $6::bigint AND p.ciclo_id = $5::bigint\n             AND p.estado = 'confirmado' AND ${PUEDE_CONFIRMAR}\n          RETURNING p.id, to_jsonb(p.*) AS j\n        )${LOG('devolver', 'presupuestos')}\n      ${CIERRE}`;\n    params = base.concat([d.id]);\n    break;\n\n  case 'prestar':\n    // Los días los pone el SERVIDOR sobre su propio reloj. Si la fecha\n    // de vencimiento viniera del cliente, prestar por un día y por un\n    // año serían la misma petición con otro número.\n    sql = `\n      WITH antes AS (SELECT to_jsonb(p.*) AS j FROM presupuestos p WHERE p.id = $6::bigint)\n      , upd AS (\n          UPDATE presupuestos p\n             SET prestado_a_grupo_id = $7::bigint,\n                 prestamo_hasta = now() + ($8::int * INTERVAL '1 day'),\n                 actualizado_en = now()\n           WHERE p.id = $6::bigint AND p.ciclo_id = $5::bigint\n             AND p.estado = 'creacion' AND ${ES_DUENO}\n             AND $8::int BETWEEN 1 AND 90\n             AND EXISTS (SELECT 1 FROM grupos g WHERE g.id = $7::bigint AND g.ciclo_id = $5::bigint)\n          RETURNING p.id, to_jsonb(p.*) AS j\n        )${LOG('prestar', 'presupuestos')}\n      ${CIERRE}`;\n    params = base.concat([d.id, d.grupo_id, Math.round(Number(d.dias) || 0)]);\n    break;\n\n  case 'quitar_prestamo':\n    sql = `\n      WITH antes AS (SELECT to_jsonb(p.*) AS j FROM presupuestos p WHERE p.id = $6::bigint)\n      , upd AS (\n          UPDATE presupuestos p\n             SET prestado_a_grupo_id = NULL, prestamo_hasta = NULL, actualizado_en = now()\n           WHERE p.id = $6::bigint AND p.ciclo_id = $5::bigint AND ${ES_DUENO}\n          RETURNING p.id, to_jsonb(p.*) AS j\n        )${LOG('quitar_prestamo', 'presupuestos')}\n      ${CIERRE}`;\n    params = base.concat([d.id]);\n    break;\n\n  default:\n    return no('ACCION_DESCONOCIDA');\n}\n\nfunction nul(v) { return v === undefined || v === null ? null : String(v); }\nfunction nulNum(v) { return v === undefined || v === null ? null : Math.round(Number(v) || 0); }\n\nreturn [{ json: { ok: true, sql: sql, params: params } }];\n"
+      },
+      "id": "d12b5a26-0b37-48f5-8132-8da3ff523f79",
+      "name": "Code - Armar consulta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {
+          "queryReplacement": "={{ $json.params }}",
+          "queryBatching": "single",
+          "largeNumbersOutput": "numbers"
+        }
+      },
+      "id": "fc10f02a-2ba2-4cda-89bb-b723319880d0",
+      "name": "Postgres - Ejecutar",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        800,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REEMPLAZAR_CRED_APP_RW",
+          "name": "tesoreria-db · app_rw"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/* Nodo: \"Code - Responder\"  (los cinco workflows de API)\n\n   Convierte el resultado de Postgres en la respuesta del webhook.\n\n   Regla: los errores que salen hacia afuera son ETIQUETAS, no el texto\n   del error de Postgres. Un mensaje de la base cuenta nombres de tablas,\n   de columnas y de restricciones a quien no tiene por qué saberlos. El\n   detalle se queda en el historial de ejecuciones de n8n. */\n\nlet salida;\ntry {\n  const arm = $('Code - Armar consulta').first().json || {};\n\n  if (!arm.ok) {\n    salida = { ok: false, error: arm.error || 'NO_AUTORIZADO' };\n  } else {\n    const fila = $input.first().json || {};\n\n    // 'afectadas' la devuelven las mutaciones; 'datos' las lecturas.\n    if (Object.prototype.hasOwnProperty.call(fila, 'afectadas')) {\n      const n = Number(fila.afectadas || 0);\n      salida = n > 0\n        ? { ok: true, afectadas: n, id: fila.id === undefined ? null : String(fila.id) }\n        // Cero renglones tocados con sesión válida significa que el\n        // WHERE excluyó el renglón: o no existe, o no es suyo. A quien\n        // pregunta se le dice lo mismo en los dos casos, a propósito:\n        // distinguirlos le confirmaría que el renglón existe.\n        : { ok: false, error: 'NO_PERMITIDO_O_NO_EXISTE' };\n    } else {\n      salida = { ok: true, datos: fila.datos === undefined ? null : fila.datos };\n    }\n  }\n} catch (e) {\n  salida = { ok: false, error: 'RESPUESTA_FALLO' };\n}\nreturn [{ json: salida }];\n"
+      },
+      "id": "caf0855b-57e1-4df4-8941-8ff8a7950da2",
+      "name": "Code - Responder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://tesoreriaescolar.github.io"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "id": "38f72309-c1ba-4f32-877c-c845c6cc4709",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1200,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code - Leer petición",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Leer petición": {
+      "main": [
+        [
+          {
+            "node": "Validar token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar token": {
+      "main": [
+        [
+          {
+            "node": "Code - Armar consulta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Armar consulta": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Ejecutar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Ejecutar": {
+      "main": [
+        [
+          {
+            "node": "Code - Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Responder": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Monterrey",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "meta": {
+    "descripcion": "Crear, editar, confirmar, devolver, prestar y eliminar. Confirmar congela el total en eventos.total_congelado. El vencimiento del prestamo se mide contra now() del servidor."
+  },
+  "pinData": {}
+}
