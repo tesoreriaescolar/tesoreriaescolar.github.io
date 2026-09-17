@@ -284,9 +284,14 @@ SELECT n, caso, esperado, resultado,
        left(regexp_replace(detalle, E'\n.*', ''), 60) AS detalle
   FROM _r ORDER BY n;
 
-SELECT CASE WHEN count(*) FILTER (WHERE resultado <> 'PASA') = 0
+-- El conteo se exige EXPLÍCITAMENTE. Sin esto, una corrida donde no se
+-- ejecutó ninguna prueba —por ejemplo contra una base sin semilla— imprimía
+-- '✅ LOS 0 PASAN', que se lee igual que un éxito. Cero pruebas no es éxito.
+SELECT CASE WHEN count(*) <> 19
+            THEN '❌ SOLO CORRIERON ' || count(*) || ' DE 19 — algo abortó antes, mira los errores de arriba'
+            WHEN count(*) FILTER (WHERE resultado <> 'PASA') = 0
             THEN '✅ LOS ' || count(*) || ' PASAN'
-            ELSE '❌ ' || count(*) FILTER (WHERE resultado <> 'PASA') || ' FALLARON — míralos arriba'
+            ELSE '❌ ' || count(*) FILTER (WHERE resultado <> 'PASA') || ' DE ' || count(*) || ' FALLARON — míralos arriba'
        END AS veredicto,
        'Postgres ' || current_setting('server_version') AS version
   FROM _r;
