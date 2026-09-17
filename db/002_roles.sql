@@ -12,8 +12,16 @@ BEGIN;
 -- ---------------------------------------------------------------------
 --  Los dos roles
 -- ---------------------------------------------------------------------
-CREATE ROLE app_rw  LOGIN PASSWORD 'CAMBIAME_app_rw';
-CREATE ROLE log_ins LOGIN PASSWORD 'CAMBIAME_log_ins';
+CREATE ROLE app_rw    LOGIN PASSWORD 'CAMBIAME_app_rw';
+CREATE ROLE log_ins   LOGIN PASSWORD 'CAMBIAME_log_ins';
+
+-- config_ro existe para UNA cosa: leer el secreto del JWT, y solo la usa
+-- el subflujo tes/validar-token. Con el secreto se FIRMAN tokens, o sea
+-- que quien lo alcance puede fabricarse una sesion de tesorera general.
+-- Por eso no lo alcanza la credencial con la que corren los cinco
+-- workflows de API: una inyeccion en cualquiera de ellos llegaria hasta
+-- donde llegue app_rw, y app_rw no llega aqui.
+CREATE ROLE config_ro LOGIN PASSWORD 'CAMBIAME_config_ro';
 
 -- El nombre de la base cambia segun donde se restaure, asi que se
 -- resuelve en tiempo de ejecucion. La etiqueta del bloque va CON NOMBRE
@@ -22,10 +30,10 @@ CREATE ROLE log_ins LOGIN PASSWORD 'CAMBIAME_log_ins';
 -- una tarde perdida.
 DO $grant$
 BEGIN
-  EXECUTE format('GRANT CONNECT ON DATABASE %I TO app_rw, log_ins', current_database());
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO app_rw, log_ins, config_ro', current_database());
 END
 $grant$;
-GRANT USAGE   ON SCHEMA   public          TO app_rw, log_ins;
+GRANT USAGE   ON SCHEMA   public          TO app_rw, log_ins, config_ro;
 
 -- ---------------------------------------------------------------------
 --  app_rw — lee y escribe las OCHO tablas de operación.

@@ -42,19 +42,36 @@ de `b`. Inyectar la librería con un reemplazo directo la deja mutilada, y
 el error que se ve después no habla de eso. Se inyecta con una **función**
 de reemplazo. Pasó al escribir esto.
 
-**4. El permiso va en el WHERE.**
+**4. El secreto del JWT lo alcanza UNA credencial, en UN nodo.**
+Con ese secreto se *firman* tokens: quien lo lea se fabrica una sesión de
+tesorera general. Por eso no lo alcanza `app_rw`, que es la credencial con
+la que corren los cinco workflows de API — una inyección en cualquiera de
+ellos llega hasta donde llegue `app_rw`, y `app_rw` no llega ahí.
+
+`tes/auth` tampoco lo lee: cuando alguien entra bien, le **pide el token**
+al subflujo. Por eso `tes/validar-token` tiene dos modos, `verificar` y
+`firmar`.
+
+Del cambio de contraseña **no se verifica la firma del JWT**, a propósito:
+se exige la contraseña actual, que es prueba de identidad más fuerte. El
+`persona_id` sale del token sin verificar, pero mentir ahí no sirve —
+habría que saber la contraseña de esa persona, y con eso se podría entrar
+igual. Verificar la firma no agregaría nada y obligaría a que `tes/auth`
+alcanzara el secreto.
+
+**5. El permiso va en el WHERE.**
 Ningún workflow filtra la respuesta después de consultarla. Si el `WHERE`
 no excluye el renglón, el dato ya salió de la base y cualquier filtro
 posterior es decoración. Los predicados están escritos una sola vez arriba
 de cada catálogo de acciones.
 
-**5. La bitácora va en la MISMA sentencia.**
+**6. La bitácora va en la MISMA sentencia.**
 Cada mutación es UNA sentencia con CTE: el cambio y su renglón de bitácora
 entran juntos o no entra ninguno. El `SELECT` final siempre referencia el
 CTE `log`, porque un CTE que nadie mira no se ejecuta.
 Comprobado: forzar el fallo de la bitácora revierte el `UPDATE`.
 
-**6. El SQL es literal, los valores son parámetros.**
+**7. El SQL es literal, los valores son parámetros.**
 Nada de lo que manda el navegador se concatena dentro del SQL. Las
 consultas son cadenas literales de los fuentes; lo del cliente viaja como
 `$1`, `$2`…
@@ -66,12 +83,16 @@ n8n descarta cosas al importar. Hay que rellenarlas:
 1. **`settings.timezone`** → `America/Monterrey`. n8n lo **descarta** al
    importar, y sin él los cron corren en el huso de la instancia. El de
    FTS corre en **UTC-4**, así que las 3:00 am serían la 1:00 am.
-2. **Credenciales**: `REEMPLAZAR_CRED_APP_RW` y `REEMPLAZAR_CRED_SMTP` en
-   cada nodo de Postgres y de correo.
+2. **Credenciales**: `REEMPLAZAR_CRED_APP_RW`, `REEMPLAZAR_CRED_CONFIG_RO`
+   y `REEMPLAZAR_CRED_SMTP`. **`config_ro` va en UN SOLO nodo de todo el
+   sistema**: `Postgres - Secreto`, dentro de `tes/validar-token`. Si
+   aparece en cualquier otro lado, está mal.
 3. **`REEMPLAZAR_ID_VALIDAR_TOKEN`**: el id que n8n le dé a
    `tes/validar-token` al importarlo. Va en los cinco de API, en el nodo
    «Validar token». **Importa ése primero.**
-4. **`REEMPLAZAR@ejemplo.com`**: el remitente de los dos cron.
+4. Los correos de los dos cron **no se ponen aquí**: salen de la tabla
+   `config_app` (`correo_destino` y `correo_origen`). El repositorio es
+   público y un correo personal es dato personal aunque no sea secreto.
 5. Los webhooks nacen con id nuevo: confirma que la ruta sea `tes/<lo que
    sea>` y no otra cosa.
 

@@ -1,37 +1,47 @@
-/* Nodo: "Code - Leer token"  (workflow tes/validar-token)
+/* Nodo: "Code - Leer entrada"  (workflow tes/validar-token)
 
-   Saca del JWT el persona_id SIN verificar la firma todavía, nada más
-   para saber a quién ir a buscar a la base.
+   El subflujo tiene DOS modos, y los dos existen para que el secreto
+   del JWT se materialice en UN SOLO workflow:
 
-   Que quede claro por qué eso no es un hoyo: con este id NO se decide
-   nada. Se usa como parámetro de una consulta ($1), y la firma se
-   comprueba en el nodo SIGUIENTE contra el secreto que trae esa misma
-   consulta. Si la firma no cuadra, la respuesta es un rechazo aunque la
-   persona exista. Lo único que un atacante consigue mintiendo aquí es
-   que la base lea un renglón que después se tira.
+     verificar  (por omisión)  token   -> quién es y qué puede
+     firmar                    persona -> token nuevo
 
-   No lanza nunca: un token ilegible es un dato de entrada, no una falla
-   del programa. */
+   tes/auth NO lee el secreto: cuando alguien entra bien, le pide a este
+   subflujo que firme. Así la credencial config_ro aparece en un solo
+   lugar de todo el sistema.
+
+   En modo 'verificar' se saca el persona_id del token SIN comprobar la
+   firma todavía, nada más para saber a quién ir a buscar. Con ese id no
+   se decide nada: es el parámetro $1 de una consulta, y la firma se
+   comprueba después contra el secreto. Si no cuadra, la respuesta es un
+   rechazo aunque la persona exista.
+
+   No lanza nunca: una entrada ilegible es un dato, no una falla. */
 
 // <<<LIB_CRIPTO>>>
 
+let modo = 'verificar';
 let personaId = 0;
 let token = '';
-let scope = '';
 
 try {
-  const entrada = $input.first().json || {};
-  token = String(entrada.token || '');
-  scope = String(entrada.scope || '');
+  const e = $input.first().json || {};
+  modo = e.modo === 'firmar' ? 'firmar' : 'verificar';
+  token = String(e.token || '');
 
-  const p = token.split('.');
-  if (p.length === 3) {
-    const cuerpo = JSON.parse(utf8Str(unb64u(p[1])));
-    const n = parseInt(cuerpo.persona_id, 10);
+  if (modo === 'firmar') {
+    const n = parseInt(e.persona_id, 10);
     if (Number.isSafeInteger(n) && n > 0) personaId = n;
+  } else {
+    const p = token.split('.');
+    if (p.length === 3) {
+      const cuerpo = JSON.parse(utf8Str(unb64u(p[1])));
+      const n = parseInt(cuerpo.persona_id, 10);
+      if (Number.isSafeInteger(n) && n > 0) personaId = n;
+    }
   }
-} catch (e) {
+} catch (err) {
   personaId = 0;
 }
 
-return [{ json: { persona_id: personaId, token: token, scope: scope } }];
+return [{ json: { modo: modo, persona_id: personaId, token: token } }];

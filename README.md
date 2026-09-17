@@ -34,6 +34,9 @@ resuelve en el servidor, y está escrito así a propósito:
 - Confirmar un presupuesto congela su total. No se vuelve a calcular.
 - Cada cambio escribe su bitácora en la misma transacción. Si falla la
   bitácora, se revierte el cambio.
+- El secreto con el que se firman las sesiones lo alcanza **una sola
+  credencial, en un solo nodo**. La credencial con la que corren los cinco
+  workflows de API no llega ahí.
 - Las contraseñas se comparan contra un revuelto (PBKDF2-SHA256, 100 000
   vueltas, con sal por persona). En claro no se guardan nunca, y al poner
   una nueva ni siquiera salen del navegador.

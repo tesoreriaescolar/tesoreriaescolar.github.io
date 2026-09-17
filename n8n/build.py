@@ -25,10 +25,13 @@ OUT  = os.path.join(AQUI, 'workflows')
 
 # Marcadores que se reemplazan a mano al importar en n8n.
 CRED_APP = {"id": "REEMPLAZAR_CRED_APP_RW",  "name": "tesoreria-db · app_rw"}
+# Solo la usa tes/validar-token. Ver db/003_config.sql.
+CRED_CFG = {"id": "REEMPLAZAR_CRED_CONFIG_RO", "name": "tesoreria-db · config_ro"}
 CRED_SMTP= {"id": "REEMPLAZAR_CRED_SMTP",    "name": "tesoreria · correo"}
 ID_VALIDAR = "REEMPLAZAR_ID_VALIDAR_TOKEN"
-CORREO_DESTINO = "esteban.calderon.iea@gmail.com"
-CORREO_ORIGEN  = "REEMPLAZAR@ejemplo.com"
+# Los correos NO viven aquí: salen de la tabla config_app. Este
+# repositorio es público, y un correo personal es dato personal aunque no
+# sea un secreto — y borrarlo de un archivo no lo borra del historial.
 
 def leer(nombre):
     with open(os.path.join(SRC, nombre), encoding='utf8') as f:
@@ -68,13 +71,13 @@ def n_webhook(wf, ruta, pos):
             "id": nid(wf, 'Webhook'), "name": "Webhook", "type": "n8n-nodes-base.webhook",
             "typeVersion": 2.1, "position": pos, "webhookId": nid(wf, 'hook')}
 
-def n_pg(wf, nombre, pos, query="={{ $json.sql }}", params="={{ $json.params }}"):
+def n_pg(wf, nombre, pos, query="={{ $json.sql }}", params="={{ $json.params }}", cred=None):
     return {"parameters": {"operation": "executeQuery", "query": query,
                            "options": {"queryReplacement": params, "queryBatching": "single",
                                        "largeNumbersOutput": "numbers"}},
             "id": nid(wf, nombre), "name": nombre, "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.7, "position": pos,
-            "credentials": {"postgres": dict(CRED_APP)}}
+            "credentials": {"postgres": dict(cred or CRED_APP)}}
 
 def n_respond(wf, pos):
     return {"parameters": {"respondWith": "json", "responseBody": "={{ JSON.stringify($json) }}",
@@ -84,19 +87,26 @@ def n_respond(wf, pos):
             "id": nid(wf, 'Responder'), "name": "Respond to Webhook",
             "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.5, "position": pos}
 
-def n_validar(wf, pos):
+ESQUEMA_VALIDAR = [
+    {"id": "modo",       "displayName": "modo",       "type": "string"},
+    {"id": "token",      "displayName": "token",      "type": "string"},
+    {"id": "persona_id", "displayName": "persona_id", "type": "number"},
+]
+def _esq():
+    return [dict(c, required=False, defaultMatch=False, display=True, canBeUsedToMatch=True)
+            for c in ESQUEMA_VALIDAR]
+
+def n_validar(wf, pos, nombre="Validar token", valores=None):
+    v = valores or {"modo": "verificar", "token": "={{ $json.token }}", "persona_id": 0}
     return {"parameters": {"workflowId": {"__rl": True, "mode": "id", "value": ID_VALIDAR},
                            "workflowInputs": {"mappingMode": "defineBelow",
-                                              "value": {"token": "={{ $json.token }}"},
+                                              "value": v,
                                               "matchingColumns": [],
-                                              "schema": [{"id": "token", "displayName": "token",
-                                                          "required": False, "defaultMatch": False,
-                                                          "display": True, "canBeUsedToMatch": True,
-                                                          "type": "string"}],
+                                              "schema": _esq(),
                                               "attemptToConvertTypes": False,
                                               "convertFieldsToString": True},
                            "mode": "once", "options": {"waitForSubWorkflow": True}},
-            "id": nid(wf, 'Validar token'), "name": "Validar token",
+            "id": nid(wf, nombre), "name": nombre,
             "type": "n8n-nodes-base.executeWorkflow", "typeVersion": 1.3, "position": pos}
 
 def conectar(nombres):
@@ -139,9 +149,12 @@ def api(nombre, ruta, armar, extra_final=None, descripcion=''):
     return wf(nombre, descripcion, n)
 
 # ---------------------------------------------------------------- 0
+# La sesión la lee app_rw. El secreto NO viene aquí: va en su propio
+# nodo, con la credencial config_ro, y DESPUÉS de éste — así el nodo que
+# puede tronar por un problema de datos nunca tiene el secreto en su
+# entrada (n8n mete la entrada del nodo que falla en el payload de error).
 SQL_SESION = """
-SELECT (SELECT valor FROM config WHERE clave = 'jwt_secret') AS jwt_secret,
-       now() AS ahora,
+SELECT now() AS ahora,
        p.id AS persona_id, p.nombre, p.usuario,
        m.rol, m.grupo_id, m.permisos, m.activo AS membresia_activa,
        c.id AS ciclo_id, c.nombre AS ciclo_nombre, c.grado
@@ -151,23 +164,31 @@ SELECT (SELECT valor FROM config WHERE clave = 'jwt_secret') AS jwt_secret,
   LEFT JOIN membresias m ON m.persona_id = p.id AND m.ciclo_id = c.id
 """.strip()
 
+SQL_SECRETO = "SELECT valor AS jwt_secret FROM config WHERE clave = 'jwt_secret'"
+
 validar = wf('tes/validar-token',
-  'Subflujo. El UNICO verificador de sesion del sistema: verifica la firma del JWT, '
-  'carga la membresia del ciclo activo y devuelve rol, grupo y permisos. Los cinco '
-  'workflows de API lo llaman al entrar. NO se activa: se llama como sub-workflow.',
+  'Subflujo. EL UNICO LUGAR DEL SISTEMA DONDE SE MATERIALIZA EL SECRETO DEL JWT. '
+  'Dos modos: verificar (token -> quien es y que puede) y firmar (persona -> token). '
+  'Los cinco workflows de API lo llaman al entrar; tes/auth lo llama para firmar. '
+  'Es el unico que usa la credencial config_ro. NO se activa: se llama como sub-workflow.',
   [{"parameters": {"inputSource": "workflowInputs",
-                   "workflowInputs": {"values": [{"name": "token", "type": "string"}]}},
+                   "workflowInputs": {"values": [{"name": "modo", "type": "string"},
+                                                 {"name": "token", "type": "string"},
+                                                 {"name": "persona_id", "type": "number"}]}},
     "id": nid('validar-token', 'Entrada'), "name": "Entrada",
     "type": "n8n-nodes-base.executeWorkflowTrigger", "typeVersion": 1.2, "position": [0, 0]},
-   n_code('validar-token', 'Code - Leer token', 'validar-token-leer.js', [200, 0]),
+   n_code('validar-token', 'Code - Leer entrada', 'validar-token-leer.js', [200, 0]),
    n_pg('validar-token', 'Postgres - Sesión', [400, 0],
         query=SQL_SESION, params="={{ [$json.persona_id] }}"),
-   n_code('validar-token', 'Code - Verificar', 'validar-token-verificar.js', [600, 0])])
+   # Con config_ro, y DESPUES del de sesion: su entrada no trae el secreto.
+   n_pg('validar-token', 'Postgres - Secreto', [600, 0],
+        query=SQL_SECRETO, params="={{ [] }}", cred=CRED_CFG),
+   n_code('validar-token', 'Code - Resolver', 'validar-token-resolver.js', [800, 0])])
 
 # ---------------------------------------------------------------- 1
+# tes/auth NO lee el secreto. Solo el hash de la persona, que compara.
 SQL_AUTH = """
-SELECT (SELECT valor FROM config WHERE clave = 'jwt_secret') AS jwt_secret,
-       p.id, p.usuario, p.nombre, p.hash,
+SELECT p.id, p.usuario, p.nombre, p.hash,
        m.rol, m.grupo_id, m.permisos, m.activo,
        c.id AS ciclo_id, c.nombre AS ciclo_nombre, c.grado
   FROM (SELECT 1) q
@@ -180,18 +201,24 @@ SELECT (SELECT valor FROM config WHERE clave = 'jwt_secret') AS jwt_secret,
 """.strip()
 
 auth = wf('tes/auth',
-  'Login y cambio de contrasena. PBKDF2-SHA256 100k + JWT HS256 (8 h) en JS puro '
-  '(el sandbox de n8n no expone crypto). Tope de 3 intentos por minuto y por usuario '
-  'en staticData. El secreto sale de la tabla config, nunca de una variable de entorno.',
+  'Login y cambio de contrasena. PBKDF2-SHA256 100k en JS puro (el sandbox de n8n no '
+  'expone crypto). Tope de 3 intentos por minuto y por usuario en staticData. '
+  'NO ALCANZA EL SECRETO DEL JWT: cuando el login es bueno le pide el token al '
+  'subflujo tes/validar-token, que es el unico que lo materializa.',
   [n_webhook('auth', 'tes/auth', [0, 0]),
    n_code('auth', 'Code - Leer petición', '_leer-peticion.js', [200, 0]),
    n_code('auth', 'Code - Persona a buscar', '_auth-buscar.js', [400, 0]),
    n_pg('auth', 'Postgres - Persona', [600, 0], query=SQL_AUTH,
         params="={{ [$json.usuario, $json.persona_id] }}"),
-   n_code('auth', 'Code - Resolver', 'auth-resolver.js', [800, 0]),
+   n_code('auth', 'Code - Verificar clave', 'auth-clave.js', [800, 0]),
+   # La escritura va ANTES de que exista el token, para que su entrada
+   # no lo lleve. persona_id 0 = no hay nada que firmar.
    n_pg('auth', 'Postgres - Aplicar', [1000, 0]),
-   n_code('auth', 'Code - Responder auth', 'auth-responder.js', [1200, 0]),
-   n_respond('auth', [1400, 0])])
+   n_validar('auth', [1200, 0], nombre='Firmar token',
+             valores={"modo": "firmar", "token": "",
+                      "persona_id": "={{ $('Code - Verificar clave').first().json.firmar_persona_id }}"}),
+   n_code('auth', 'Code - Responder auth', 'auth-responder.js', [1400, 0]),
+   n_respond('auth', [1600, 0])])
 
 # ---------------------------------------------------------------- 2..5
 lectura = api('tes/lectura', 'tes/lectura', 'lectura-armar.js',
@@ -225,7 +252,9 @@ SELECT json_build_object(
   -- truncara por fuera, y los movimientos del dia van por la funcion.
   'bitacora',     '[]'::json,
   'movimientos',  '[]'::json
-) AS datos
+) AS datos,
+(SELECT valor FROM config_app WHERE clave = 'correo_destino') AS correo_destino,
+(SELECT valor FROM config_app WHERE clave = 'correo_origen')  AS correo_origen
 """.strip()
 
 respaldo = wf('tes/respaldo',
@@ -237,7 +266,8 @@ respaldo = wf('tes/respaldo',
     "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.4, "position": [0, 0]},
    n_pg('respaldo', 'Postgres - Volcar tablas', [200, 0], query=SQL_RESPALDO, params="={{ [] }}"),
    n_code('respaldo', 'Code - Armar respaldo', 'respaldo-correo.js', [400, 0]),
-   {"parameters": {"fromEmail": CORREO_ORIGEN, "toEmail": CORREO_DESTINO,
+   {"parameters": {"fromEmail": "={{ $json.correo_origen }}",
+                   "toEmail": "={{ $json.correo_destino }}",
                    "subject": "={{ $json.asunto }}", "emailFormat": "html",
                    "html": "={{ $json.html }}",
                    "options": {"fileAttachments": "respaldo", "appendAttribution": False}},
@@ -253,7 +283,9 @@ respaldo = wf('tes/respaldo',
 SQL_VIGIA = """
 SELECT ultimo_respaldo() AS ultimo,
        now() AS ahora,
-       (ultimo_respaldo() IS NULL OR ultimo_respaldo() < now() - INTERVAL '24 hours') AS hay_problema
+       (ultimo_respaldo() IS NULL OR ultimo_respaldo() < now() - INTERVAL '24 hours') AS hay_problema,
+       (SELECT valor FROM config_app WHERE clave = 'correo_destino') AS correo_destino,
+       (SELECT valor FROM config_app WHERE clave = 'correo_origen')  AS correo_origen
 """.strip()
 
 vigia = wf('tes/vigia',
@@ -271,7 +303,8 @@ vigia = wf('tes/vigia',
                    "looseTypeValidation": True, "options": {}},
     "id": nid('vigia', 'IF'), "name": "¿Falta respaldo?", "type": "n8n-nodes-base.if",
     "typeVersion": 2.2, "position": [400, 0]},
-   {"parameters": {"fromEmail": CORREO_ORIGEN, "toEmail": CORREO_DESTINO,
+   {"parameters": {"fromEmail": "={{ $json.correo_origen }}",
+                   "toEmail": "={{ $json.correo_destino }}",
                    "subject": "⚠️ Tesorería Escolar: no hubo respaldo",
                    "emailFormat": "html",
                    "html": ("=<p>El respaldo de las 3:00 am no dejó rastro en las últimas 24 horas.</p>"

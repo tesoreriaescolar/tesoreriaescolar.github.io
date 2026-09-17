@@ -25,7 +25,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT ultimo_respaldo() AS ultimo,\n       now() AS ahora,\n       (ultimo_respaldo() IS NULL OR ultimo_respaldo() < now() - INTERVAL '24 hours') AS hay_problema",
+        "query": "SELECT ultimo_respaldo() AS ultimo,\n       now() AS ahora,\n       (ultimo_respaldo() IS NULL OR ultimo_respaldo() < now() - INTERVAL '24 hours') AS hay_problema,\n       (SELECT valor FROM config_app WHERE clave = 'correo_destino') AS correo_destino,\n       (SELECT valor FROM config_app WHERE clave = 'correo_origen')  AS correo_origen",
         "options": {
           "queryReplacement": "={{ [] }}",
           "queryBatching": "single",
@@ -84,8 +84,8 @@
     },
     {
       "parameters": {
-        "fromEmail": "REEMPLAZAR@ejemplo.com",
-        "toEmail": "esteban.calderon.iea@gmail.com",
+        "fromEmail": "={{ $json.correo_origen }}",
+        "toEmail": "={{ $json.correo_destino }}",
         "subject": "⚠️ Tesorería Escolar: no hubo respaldo",
         "emailFormat": "html",
         "html": "=<p>El respaldo de las 3:00 am no dejó rastro en las últimas 24 horas.</p><p>Último respaldo registrado: <b>{{ $json.ultimo || 'ninguno' }}</b><br>Revisado: {{ $json.ahora }}</p><p>Revisa la ejecución del workflow <code>tes/respaldo</code> en n8n.</p>",

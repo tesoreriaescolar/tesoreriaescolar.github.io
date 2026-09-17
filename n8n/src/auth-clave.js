@@ -1,36 +1,38 @@
-/* Nodo: "Code - Resolver"  (workflow tes/auth)
+/* Nodo: "Code - Verificar clave"  (workflow tes/auth)
 
-   Login y cambio de contraseña. Aquí se compara la contraseña contra el
-   HASH, se mintea el JWT y se calcula el hash nuevo.
+   Compara la contraseña contra el hash y decide qué sigue. **NO ve el
+   secreto del JWT**: si el login es bueno, el token lo firma el subflujo
+   tes/validar-token, que es el único que alcanza ese secreto.
 
-   ⚠️ TODO va en try/catch, sin excepción. La entrada de este nodo trae
-   el secreto del JWT y el hash de la persona; si el nodo lanzara, n8n
-   guardaría su ENTRADA en el payload de error de la ejecución. Un nodo
-   que no lanza no produce payload de error. Ver n8n/README.md regla 2.
+   ⚠️ try/catch total de todos modos: la entrada trae el hash de la
+   persona. No es el secreto que abre todo, pero tampoco tiene por qué
+   acabar en el historial de ejecuciones si algo truena.
 
-   Y lo que sale hacia el nodo de Postgres NO lleva el token ni el
-   secreto: el token se recoge después con $('Code - Resolver'), para
-   que el nodo que sí puede tronar no lo tenga nunca en su entrada. */
+   Nota de diseño sobre el cambio de contraseña: NO se verifica la firma
+   del JWT, y es a propósito. Se exige la contraseña ACTUAL, que es
+   prueba de identidad más fuerte que el token. El persona_id sale del
+   token sin verificar, pero mentir ahí no sirve de nada: para cambiarle
+   la contraseña a alguien habría que saber la suya, y con eso se podría
+   entrar de todos modos. Verificar la firma no agregaría nada y
+   obligaría a que tes/auth alcanzara el secreto. */
 
 // <<<LIB_CRIPTO>>>
 
-const HORAS_TOKEN = 8;
 const MAX_INTENTOS = 3;         // por minuto y por usuario
 const VENTANA_MS = 60 * 1000;
 
-let respuesta, sql = 'SELECT 0 AS afectadas WHERE false', params = [];
+let respuesta = null;
+let sql = 'SELECT 0 AS afectadas WHERE false';
+let params = [];
+let firmarPersonaId = 0;        // 0 = no se firma nada
 
 try {
   const fila = $input.first().json || {};
   const pet = $('Code - Leer petición').first().json || {};
   const d = pet.datos || {};
-  const secreto = fila.jwt_secret;
-
-  if (!secreto) {
-    respuesta = { ok: false, error: 'CONFIG_SIN_SECRETO' };
 
   /* ---------------- LOGIN ---------------- */
-  } else if (pet.accion === 'login') {
+  if (pet.accion === 'login') {
     const usuario = String(d.usuario || '').trim().toUpperCase();
 
     // El contador vive en staticData, o sea en la instancia de n8n, no
@@ -58,45 +60,24 @@ try {
         st.intentos[usuario] = reg;
         respuesta = { ok: false, error: 'CREDENCIALES',
                       mensaje: 'Usuario o contraseña incorrectos.' };
-      } else if (!fila.ciclo_id) {
-        respuesta = { ok: false, error: 'SIN_CICLO_ACTIVO',
-                      mensaje: 'Todavía no hay un ciclo escolar activo. Habla con la tesorera.' };
-      } else if (!fila.rol) {
-        respuesta = { ok: false, error: 'SIN_MEMBRESIA',
-                      mensaje: 'Tu cuenta no está dada de alta en el ciclo actual. Habla con la tesorera.' };
-      } else if (fila.activo !== true) {
-        respuesta = { ok: false, error: 'DESACTIVADA',
-                      mensaje: 'Esta cuenta está desactivada. Habla con la tesorera.' };
       } else {
         delete st.intentos[usuario];
-        const perm = fila.permisos || {};
-        respuesta = {
-          ok: true,
-          token: firmaJwt({ persona_id: Number(fila.id) }, secreto, HORAS_TOKEN * 3600),
-          sesion: {
-            u: fila.usuario,
-            nom: fila.nombre,
-            rol: fila.rol,
-            salon: fila.grupo_id === null || fila.grupo_id === undefined ? null : String(fila.grupo_id),
-            tickets: perm.tickets === true,
-            verPres: perm.ver_presupuesto === true,
-            verTodos: perm.ver_todos_los_grupos === true
-          }
-        };
+        // Contraseña correcta. El resto —que exista ciclo, que tenga
+        // membresía, que la cuenta esté activa— lo comprueba el subflujo
+        // al firmar, que es donde ya vive esa lógica. Aquí no se repite.
+        firmarPersonaId = Number(fila.id);
+        respuesta = null;   // la arma "Code - Responder auth" con el token
       }
     }
 
   /* ------------- CAMBIO DE CONTRASEÑA ------------- */
   } else if (pet.accion === 'password') {
-    const v = verificaJwt(pet.token, secreto);
     const nueva = String(d.nueva || '');
 
-    if (!v.ok) {
-      respuesta = { ok: false, error: v.error };
-    } else if (!fila.id || Number(v.payload.persona_id) !== Number(fila.id)) {
-      respuesta = { ok: false, error: 'TOKEN_NO_CORRESPONDE' };
+    if (!fila.id) {
+      respuesta = { ok: false, error: 'TOKEN_MAL_FORMADO' };
     } else if (!verificaClave(String(d.actual || ''), fila.hash || '')) {
-      // Exigir la actual aunque ya traiga token: un celular prestado o
+      // Se exige la actual aunque traiga token: un celular prestado o
       // desbloqueado no debe poder dejar a nadie fuera de su cuenta.
       respuesta = { ok: false, error: 'CREDENCIALES',
                     mensaje: 'La contraseña actual no es correcta.' };
@@ -104,8 +85,8 @@ try {
       respuesta = { ok: false, error: 'CLAVE_CORTA',
                     mensaje: 'La contraseña nueva tiene que ser de al menos 8 caracteres.' };
     } else {
-      // La sal es NUEVA cada vez. Reusar la anterior haría que dos
-      // contraseñas iguales dieran el mismo hash.
+      // Sal NUEVA cada vez. Reusar la anterior haría que dos contraseñas
+      // iguales dieran el mismo hash.
       const sal = [];
       for (let i = 0; i < 16; i++) sal.push(Math.floor(Math.random() * 256));
       const hash = hashClave(nueva, b64u(new Uint8Array(sal)));
@@ -134,7 +115,9 @@ try {
   respuesta = { ok: false, error: 'AUTH_FALLO' };
 }
 
-// Al nodo de Postgres SOLO le va el SQL y sus parámetros. El token y la
-// sesión se quedan aquí y los recoge "Code - Responder auth".
-return [{ json: { sql: sql, params: params, hay_escritura: params.length > 0,
+/* Lo que sale NO trae ni el hash ni ningún secreto: solo el SQL con sus
+   parámetros (el hash nuevo es irreversible), a quién firmar, y la
+   respuesta ya redactada para los casos que no necesitan token. */
+return [{ json: { sql: sql, params: params,
+                  firmar_persona_id: firmarPersonaId,
                   _respuesta: respuesta } }];

@@ -10,7 +10,12 @@
 
 let salida;
 try {
-  const d = ($input.first().json || {}).datos || {};
+  const fila = $input.first().json || {};
+  const d = fila.datos || {};
+  // Los correos salen de config_app, no del repo. Se propagan porque el
+  // nodo de correo lee de la salida de ESTE nodo.
+  const correoDestino = fila.correo_destino || '';
+  const correoOrigen = fila.correo_origen || '';
 
   // --- 1. Enmascarar la CLABE antes de que toque el archivo ---------
   const ultimos4 = (c) => {
@@ -75,6 +80,8 @@ try {
   salida = {
     json: {
       ok: true,
+      correo_destino: correoDestino,
+      correo_origen: correoOrigen,
       asunto: `Respaldo Tesorería Escolar · ${hoy} · ${movs.length} movimiento(s)`,
       html: html,
       conteos: conteos,
@@ -92,7 +99,13 @@ try {
   // Que el respaldo truene NO puede quedarse callado: el vigía de las
   // 9 am se entera porque no hay renglón de bitácora, pero además el
   // correo sale igual diciendo que falló.
-  salida = { json: { ok: false, error: 'RESPALDO_FALLO',
+  // Aun fallando hay que poder mandar el aviso, así que los correos se
+  // vuelven a leer de la entrada en vez de darlos por perdidos.
+  const f = $input.first().json || {};
+  salida = { json: { ok: false,
+                     correo_destino: f.correo_destino || '',
+                     correo_origen: f.correo_origen || '',
+                     error: 'RESPALDO_FALLO',
                      asunto: 'FALLÓ el respaldo de Tesorería Escolar',
                      html: '<p>El respaldo de las 3:00 am no se pudo armar. Revisa la ejecución en n8n.</p>' } };
 }

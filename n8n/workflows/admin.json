@@ -45,18 +45,38 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "token": "={{ $json.token }}"
+            "modo": "verificar",
+            "token": "={{ $json.token }}",
+            "persona_id": 0
           },
           "matchingColumns": [],
           "schema": [
             {
-              "id": "token",
-              "displayName": "token",
+              "id": "modo",
+              "displayName": "modo",
+              "type": "string",
               "required": false,
               "defaultMatch": false,
               "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string"
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "token",
+              "displayName": "token",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "persona_id",
+              "displayName": "persona_id",
+              "type": "number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
             }
           ],
           "attemptToConvertTypes": false,

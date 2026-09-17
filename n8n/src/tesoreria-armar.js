@@ -141,11 +141,13 @@ switch (pet.accion) {
     if (subir && s.permisos && s.permisos.tickets !== true) return no('SIN_PERMISO_TICKETS');
     sql = `
       SELECT g.id AS gasto_id, g.ticket_key,
-             (SELECT valor FROM config WHERE clave = 's3_endpoint') AS s3_endpoint,
-             (SELECT valor FROM config WHERE clave = 's3_region')   AS s3_region,
-             (SELECT valor FROM config WHERE clave = 's3_bucket')   AS s3_bucket,
-             (SELECT valor FROM config WHERE clave = 's3_key_id')   AS s3_key_id,
-             (SELECT valor FROM config WHERE clave = 's3_secret')   AS s3_secret
+             -- De config_app, NO de config: app_rw no alcanza el
+             -- secreto del JWT ni por accidente.
+             (SELECT valor FROM config_app WHERE clave = 's3_endpoint') AS s3_endpoint,
+             (SELECT valor FROM config_app WHERE clave = 's3_region')   AS s3_region,
+             (SELECT valor FROM config_app WHERE clave = 's3_bucket')   AS s3_bucket,
+             (SELECT valor FROM config_app WHERE clave = 's3_key_id')   AS s3_key_id,
+             (SELECT valor FROM config_app WHERE clave = 's3_secret')   AS s3_secret
         FROM gastos g
        WHERE g.id = $7::bigint AND g.evento_id = $6::bigint AND ${EVENTO_MIO}`;
     params = base.concat([d.evento_id, d.gasto_id]);
