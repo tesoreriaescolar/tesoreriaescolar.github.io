@@ -158,6 +158,23 @@ aws s3api get-bucket-cors --bucket tesoreria-tickets-qffkcft `
 Un solo origen, el de la aplicación. **Ver** la foto no necesita CORS —va
 por `<img src>`, no por `fetch`—; `GET` y `HEAD` van por si acaso.
 
+**5-ter. ⚠️ Un nodo con criptografía pegada NO se edita transcribiéndolo.**
+`Code - Firmar URL y responder` de `tes/tesoreria` son 17.5 KB, y la mayor
+parte es `lib-cripto` + `lib-s3` inyectadas por `build.py`. Cambiar un solo
+carácter ahí rompe la firma de los tickets **sin que nada avise hasta que
+alguien intenta subir una foto**.
+
+Así que ese nodo se cambia **reconstruyéndolo desde el repo**
+(`python3 n8n/build.py` y reimportar `n8n/workflows/tesoreria.json` desde la
+UI), nunca pegando el cuerpo a mano.
+
+🔴 **Deuda conocida al 17-sep-2026:** ese nodo es el **único** lugar donde la
+instancia y el repo difieren. El repo le agregó una línea —pasar el campo
+`repetido` de la ventana anti-repetido— y la instancia todavía no la tiene.
+No rompe nada: el cliente decide lo mismo por su cuenta comparando el `id`
+que vuelve contra los que ya conocía (ver `api.addGasto`). Se salda sola la
+próxima vez que ese workflow se reimporte desde el repo.
+
 **6. n8n guarda la SALIDA de cada nodo — un secreto ahí se escribe en claro.**
 No basta con que el nodo no lance. En el camino feliz, lo que un nodo
 devuelve se escribe tal cual en la base de n8n para cada ejecución que se
