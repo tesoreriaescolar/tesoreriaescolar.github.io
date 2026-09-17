@@ -34,8 +34,12 @@ function llaveDeFirma(secreto, ymd, region, servicio) {
 }
 
 /*
-  cfg = { endpoint, region, bucket, keyId, secret }
-    endpoint: 'https://algo.railway.app' (sin diagonal final)
+  cfg = { endpoint, region, bucket, keyId, secret, estilo }
+    endpoint: 'https://t3.storageapi.dev' (sin diagonal final)
+    bucket:   el nombre GLOBAL del bucket, con su hash: la variable
+              BUCKET de la pestaña Credentials, no el nombre que se ve
+              en el lienzo de Railway
+    estilo:   'virtual' (por omisión) o 'path'
   metodo: 'PUT' para subir, 'GET' para ver
   llave:  la ruta dentro del bucket (gastos/12/1789…-ticket.jpg)
   segundos: vigencia
@@ -47,10 +51,24 @@ function urlFirmada(cfg, metodo, llave, segundos) {
   const alcance = f.ymd + '/' + cfg.region + '/' + servicio + '/aws4_request';
 
   const base = String(cfg.endpoint).replace(/\/+$/, '');
-  const host = base.replace(/^https?:\/\//, '').split('/')[0];
-  // Path-style: /<bucket>/<llave>. Railway lo sirve así, y además evita
-  // el lío de los certificados comodín del virtual-host style.
-  const ruta = '/' + uriEnc(cfg.bucket) + '/' + uriEnc(llave, true);
+  const hostBase = base.replace(/^https?:\/\//, '').split('/')[0];
+  const esquema = base.startsWith('http://') ? 'http://' : 'https://';
+
+  /* DOS estilos de URL, y elegir mal NO da un error que hable de esto:
+     da un fallo de firma, porque el host y la ruta entran en el texto
+     que se firma.
+
+       virtual-hosted   https://<bucket>.<endpoint>/<llave>   <- Railway
+       path             https://<endpoint>/<bucket>/<llave>   <- buckets viejos
+
+     Railway dice: "Railway Buckets use virtual-hosted-style URLs, where
+     the bucket name appears as the subdomain of the S3 endpoint", y que
+     los buckets creados antes de ese cambio pueden necesitar path —
+     la pestaña Credentials del bucket dice cuál toca. Por eso es un
+     ajuste (config_app.s3_estilo) y no una decisión escrita aquí. */
+  const path = String(cfg.estilo || '').toLowerCase() === 'path';
+  const host = path ? hostBase : uriEnc(cfg.bucket) + '.' + hostBase;
+  const ruta = (path ? '/' + uriEnc(cfg.bucket) : '') + '/' + uriEnc(llave, true);
 
   const q = [
     ['X-Amz-Algorithm', 'AWS4-HMAC-SHA256'],
@@ -78,7 +96,7 @@ function urlFirmada(cfg, metodo, llave, segundos) {
   ].join('\n');
 
   const firma = hex(hmacSha256(llaveDeFirma(cfg.secret, f.ymd, cfg.region, servicio), utf8Bytes(porFirmar)));
-  return base + ruta + '?' + consulta + '&X-Amz-Signature=' + firma;
+  return esquema + host + ruta + '?' + consulta + '&X-Amz-Signature=' + firma;
 }
 
 /* La llave del ticket la arma el SERVIDOR, nunca el navegador: si el

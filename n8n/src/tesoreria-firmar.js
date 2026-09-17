@@ -46,7 +46,8 @@ try {
     } else {
       const cfg = {
         endpoint: fila.s3_endpoint, region: fila.s3_region || 'us-east-1',
-        bucket: fila.s3_bucket, keyId: fila.s3_key_id, secret: fila.s3_secret
+        bucket: fila.s3_bucket, keyId: fila.s3_key_id, secret: fila.s3_secret,
+        estilo: fila.s3_estilo || 'virtual'
       };
 
       if (arm.firmar === 'PUT') {

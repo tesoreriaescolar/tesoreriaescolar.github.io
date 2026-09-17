@@ -161,7 +161,8 @@ switch (pet.accion) {
              (SELECT valor FROM config_app WHERE clave = 's3_region')   AS s3_region,
              (SELECT valor FROM config_app WHERE clave = 's3_bucket')   AS s3_bucket,
              (SELECT valor FROM config_app WHERE clave = 's3_key_id')   AS s3_key_id,
-             (SELECT valor FROM config_app WHERE clave = 's3_secret')   AS s3_secret
+             (SELECT valor FROM config_app WHERE clave = 's3_secret')   AS s3_secret,
+             (SELECT valor FROM config_app WHERE clave = 's3_estilo')   AS s3_estilo
         FROM gastos g
        WHERE g.id = $7::bigint AND g.evento_id = $6::bigint AND ${EVENTO_MIO}`;
     params = base.concat([d.evento_id, d.gasto_id]);
