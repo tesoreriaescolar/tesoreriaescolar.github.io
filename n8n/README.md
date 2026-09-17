@@ -96,6 +96,68 @@ Y dos valores que se leen de esa misma pestaña y **no se adivinan**:
 (`tesoreria-tickets-jdhhd8oe18xi`), y `REGION` en Railway suele ser `auto`,
 no una región de AWS.
 
+**5-bis. 🔴 El bucket necesita una regla de CORS, y Railway no tiene botón.**
+La foto la sube el NAVEGADOR directo al bucket, con `fetch` y método `PUT`.
+Un `PUT` entre dominios distintos obliga al navegador a mandar antes una
+**verificación previa** (`OPTIONS`), y a cortar si la respuesta no trae
+`Access-Control-Allow-Origin`.
+
+Un bucket de Railway nace **sin ninguna regla de CORS**, y su verificación
+previa contesta **`200` con cero cabeceras** — o sea que el código de
+respuesta dice «bien» y el navegador corta igual. Medido el 17-sep-2026:
+
+```
+OPTIONS https://tesoreria-tickets-qffkcft.t3.storageapi.dev/gastos/x.jpg
+        Origin: https://tesoreriaescolar.github.io
+        Access-Control-Request-Method: PUT
+→ 200 OK   headers: {date, content-length: 0, connection: close}
+GET .../?cors (firmado) → 200  <CORSConfiguration></CORSConfiguration>
+```
+
+Y desde JavaScript eso **no se distingue de estar sin internet**: el
+`fetch` lanza en vez de devolver un código, porque no hubo respuesta que
+mirar. Por eso `api.subirTicket` separa los dos casos con
+`navigator.onLine` en vez de culpar a la red.
+
+⚠️ **Ojo con el estilo `path`.** La misma llave pedida como
+`https://<endpoint>/<bucket>/<llave>` **sí** contesta con
+`access-control-allow-origin: *` — es la capa de enfrente de Tigris, no una
+regla del bucket (el `?cors` vacío lo prueba). No sirve como arreglo:
+sería apoyarse en un efecto lateral no documentado.
+
+**El arreglo** es poner la regla por la API de S3, que es lo que manda la
+[documentación de Railway](https://docs.railway.com/storage-buckets/uploading-serving).
+Las llaves salen de Railway → el bucket → pestaña **Credentials**:
+
+```powershell
+# En PowerShell. No sirve la forma `VAR=x comando` de la documentación:
+# eso es sintaxis de bash y en PowerShell no asigna nada.
+$env:AWS_ACCESS_KEY_ID     = '<ACCESS_KEY_ID del bucket>'
+$env:AWS_SECRET_ACCESS_KEY = '<SECRET_ACCESS_KEY del bucket>'
+$env:AWS_DEFAULT_REGION    = 'auto'
+
+# El JSON va en un ARCHIVO. Pasarlo en la línea de comandos se atora con
+# el escapado de comillas de PowerShell hacia programas nativos.
+@'
+{ "CORSRules": [ {
+    "AllowedOrigins": ["https://tesoreriaescolar.github.io"],
+    "AllowedMethods": ["PUT","GET","HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders":  ["ETag"],
+    "MaxAgeSeconds":  3000
+} ] }
+'@ | Set-Content -Encoding ascii cors.json
+
+aws s3api put-bucket-cors --bucket tesoreria-tickets-qffkcft `
+  --endpoint-url https://t3.storageapi.dev --cors-configuration file://cors.json
+
+aws s3api get-bucket-cors --bucket tesoreria-tickets-qffkcft `
+  --endpoint-url https://t3.storageapi.dev      # leer de vuelta
+```
+
+Un solo origen, el de la aplicación. **Ver** la foto no necesita CORS —va
+por `<img src>`, no por `fetch`—; `GET` y `HEAD` van por si acaso.
+
 **6. n8n guarda la SALIDA de cada nodo — un secreto ahí se escribe en claro.**
 No basta con que el nodo no lance. En el camino feliz, lo que un nodo
 devuelve se escribe tal cual en la base de n8n para cada ejecución que se
