@@ -117,11 +117,38 @@ def n_webhook(wf, ruta, pos):
             "typeVersion": 2.1, "position": pos, "webhookId": nid(wf, 'hook')}
 
 def n_pg(wf, nombre, pos, query="={{ $json.sql }}", params="={{ $json.params }}", cred=None):
+    """Nodo Postgres.
+
+    ⚠️ alwaysOutputData NO es opcional aquí, y cuesta explicarlo una vez:
+
+    Cuando una consulta devuelve CERO FILAS, el nodo de Postgres emite CERO
+    ITEMS, y en n8n cero items significa que TODO lo que sigue se salta.
+    Incluido el "Respond to Webhook". El webhook entonces cierra con 200 y
+    el cuerpo VACIO: sin error, sin nada que mirar.
+
+    Y aqui eso no es un caso raro, es el caso NORMAL: los cinco workflows
+    de API usan una consulta centinela —SELECT 0 AS afectadas WHERE false—
+    para los rechazos, y tes/auth la usa tambien en el login BUENO, porque
+    entrar no escribe nada. O sea que el camino feliz del login devolvia
+    cero filas y la respuesta nunca se armaba.
+
+    Con alwaysOutputData el nodo emite un item vacio, la cadena sigue, y el
+    Code de respuesta arma el JSON que toca — que YA sabe manejar el caso
+    vacio, porque lee el veredicto de los nodos de arriba, no de $json.
+
+    Medido el 17-sep-2026: ejecucion 101777 (login, se corta en
+    "Postgres - Aplicar" con main:[[]]) y 101780 (el mismo login con la
+    bandera puesta, responde ok:true con su token).
+
+    Es el mismo guardia que lleva comercial/cotizacion en su nodo
+    "Postgres - Machote del actor", y por la misma razon.
+    """
     return {"parameters": {"operation": "executeQuery", "query": query,
                            "options": {"queryReplacement": params, "queryBatching": "single",
                                        "largeNumbersOutput": "numbers"}},
             "id": nid(wf, nombre), "name": nombre, "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.7, "position": pos,
+            "alwaysOutputData": True,
             "credentials": {"postgres": dict(cred or CRED_APP)}}
 
 def n_graph(wf, nombre, pos):
