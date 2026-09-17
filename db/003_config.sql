@@ -77,8 +77,16 @@ INSERT INTO config (clave, valor) VALUES
 
 INSERT INTO config_app (clave, valor) VALUES
   ('s3_endpoint',     'CAMBIAME_https://...railway.app'),
-  ('s3_region',       'us-east-1'),
-  ('s3_bucket',       'tesoreria-tickets'),
+  -- La REGION y el BUCKET salen de la pestaña Credentials del bucket.
+  -- Ojo con las dos: el bucket real lleva un hash detrás del nombre
+  -- que ves en el lienzo, y la region de Railway suele ser 'auto',
+  -- no una de AWS. Si cualquiera de las dos esta mal, la firma no
+  -- cuadra y el error que devuelve S3 no habla de esto.
+  ('s3_region',       'CAMBIAME_la_REGION_de_la_pestana_Credentials'),
+  -- 'virtual' (lo normal en Railway) o 'path' (buckets viejos).
+  -- La pestana Credentials dice cual.
+  ('s3_estilo',       'virtual'),
+  ('s3_bucket',       'CAMBIAME_el_BUCKET_con_su_hash'),
   ('s3_key_id',       'CAMBIAME'),
   ('s3_secret',       'CAMBIAME'),
   -- Los correos de los dos cron viven aquí y NO en el repo: este
@@ -110,7 +118,7 @@ COMMIT;
 --  2) Y la prueba de verdad, que es tocar:
 --
 --     SET ROLE app_rw;    SELECT * FROM config;         -- permission denied
---     SET ROLE app_rw;    SELECT * FROM config_app;  -- 7 renglones
+--     SET ROLE app_rw;    SELECT * FROM config_app;  -- 8 renglones
 --     SET ROLE config_ro; SELECT * FROM config;         -- 1 renglón
 --     SET ROLE config_ro; SELECT * FROM config_app;  -- permission denied
 --     SET ROLE config_ro; SELECT * FROM personas;       -- permission denied

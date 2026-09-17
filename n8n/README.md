@@ -59,7 +59,20 @@ habría que saber la contraseña de esa persona, y con eso se podría entrar
 igual. Verificar la firma no agregaría nada y obligaría a que `tes/auth`
 alcanzara el secreto.
 
-**5. n8n guarda la SALIDA de cada nodo — un secreto ahí se escribe en claro.**
+**5. El bucket de Railway es virtual-hosted, y elegir mal no lo dice.**
+La URL firmada se arma `https://<bucket>.<endpoint>/<llave>`, no
+`https://<endpoint>/<bucket>/<llave>`. El host y la ruta entran en el texto
+que se firma, así que equivocarse **no da un error que hable de esto**: da
+un fallo de firma. Va como ajuste (`config_app.s3_estilo`) porque los
+buckets creados antes del cambio usan `path`, y la pestaña Credentials del
+bucket dice cuál toca.
+
+Y dos valores que se leen de esa misma pestaña y **no se adivinan**:
+`BUCKET` lleva un hash detrás del nombre que se ve en el lienzo
+(`tesoreria-tickets-jdhhd8oe18xi`), y `REGION` en Railway suele ser `auto`,
+no una región de AWS.
+
+**6. n8n guarda la SALIDA de cada nodo — un secreto ahí se escribe en claro.**
 No basta con que el nodo no lance. En el camino feliz, lo que un nodo
 devuelve se escribe tal cual en la base de n8n para cada ejecución que se
 conserve. Un nodo que devuelve un secreto lo guarda **en cada petición**.
@@ -79,26 +92,26 @@ al importar y probar.
 en la UI reabre el hoyo sin que nada avise. El arreglo estructural es que
 el secreto no sea nunca la salida de un nodo.
 
-**6. Los permisos se EXIGEN, nunca se descartan.**
+**7. Los permisos se EXIGEN, nunca se descartan.**
 `if (x && x.y !== true) rechaza` **no corre cuando `x` falta**. Se escribe
 al revés: sigue solo si el permiso vale exactamente `true`. Lo mismo con
 los roles: lista de quién pasa, no lista de quién no — así un rol nuevo
 queda fuera por omisión. Es la misma forma del `CHECK` que devolvía `NULL`
 y dejaba pasar justo el caso que existía para atrapar.
 
-**7. El permiso va en el WHERE.**
+**8. El permiso va en el WHERE.**
 Ningún workflow filtra la respuesta después de consultarla. Si el `WHERE`
 no excluye el renglón, el dato ya salió de la base y cualquier filtro
 posterior es decoración. Los predicados están escritos una sola vez arriba
 de cada catálogo de acciones.
 
-**8. La bitácora va en la MISMA sentencia.**
+**9. La bitácora va en la MISMA sentencia.**
 Cada mutación es UNA sentencia con CTE: el cambio y su renglón de bitácora
 entran juntos o no entra ninguno. El `SELECT` final siempre referencia el
 CTE `log`, porque un CTE que nadie mira no se ejecuta.
 Comprobado: forzar el fallo de la bitácora revierte el `UPDATE`.
 
-**9. El SQL es literal, los valores son parámetros.**
+**10. El SQL es literal, los valores son parámetros.**
 Nada de lo que manda el navegador se concatena dentro del SQL. Las
 consultas son cadenas literales de los fuentes; lo del cliente viaja como
 `$1`, `$2`…
