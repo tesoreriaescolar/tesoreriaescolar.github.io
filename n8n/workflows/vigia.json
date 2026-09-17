@@ -84,27 +84,51 @@
     },
     {
       "parameters": {
-        "fromEmail": "={{ $json.correo_origen }}",
-        "toEmail": "={{ $json.correo_destino }}",
-        "subject": "⚠️ Tesorería Escolar: no hubo respaldo",
-        "emailFormat": "html",
-        "html": "=<p>El respaldo de las 3:00 am no dejó rastro en las últimas 24 horas.</p><p>Último respaldo registrado: <b>{{ $json.ultimo || 'ninguno' }}</b><br>Revisado: {{ $json.ahora }}</p><p>Revisa la ejecución del workflow <code>tes/respaldo</code> en n8n.</p>",
-        "options": {
-          "appendAttribution": false
-        }
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/* Nodo: \"Code - Armar aviso\"  (workflow tes/vigia, 9:00 am)\n\n   Arma el sobre de Microsoft Graph para el aviso de \"no hubo respaldo\".\n\n   Por qué existe este nodo y antes no: el aviso se armaba con expresiones\n   dentro del nodo de correo SMTP. No hay credencial SMTP —el correo de FTS\n   sale por Graph— y el cuerpo de Graph es un JSON con estructura, no dos\n   campos sueltos. Armarlo con expresiones dentro del nodo HTTP sería una\n   sola línea ilegible; aquí se ve.\n\n   Este nodo NO ve secretos: su entrada es el resultado de una consulta de\n   solo lectura (fechas y dos correos). Aun así va en try/catch, porque si\n   lanzara no habría aviso — y el aviso es justamente lo único que queda\n   cuando el respaldo falló. */\n\nlet salida;\ntry {\n  const f = $input.first().json || {};\n  const correoDestino = f.correo_destino || '';\n  const correoOrigen = f.correo_origen || '';\n\n  function esc(s) {\n    return String(s === null || s === undefined ? '' : s)\n      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\n  }\n\n  /* Las dos fechas se muestran tal como las devuelve Postgres, en UTC y\n     dichas con todas sus letras. Un \"ayer a las 3\" sin huso es justo la\n     forma de leer mal un incidente: seis horas de diferencia bastan para\n     creer que el respaldo corrió cuando no. */\n  const ultimo = f.ultimo ? String(f.ultimo) : null;\n  const asunto = 'Tesorería Escolar: no hubo respaldo';\n  const html =\n    '<div style=\"font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;color:#13202B\">' +\n    '<h2 style=\"margin:0 0 4px\">No hubo respaldo</h2>' +\n    '<p>El respaldo de las 3:00 am no dejó rastro en las últimas 24 horas.</p>' +\n    '<table style=\"border-collapse:collapse;margin:12px 0\">' +\n    '<tr><td style=\"padding:2px 14px 2px 0;color:#5C6B78\">Último respaldo</td><td><b>' +\n    (ultimo ? esc(ultimo) : 'ninguno') + '</b></td></tr>' +\n    '<tr><td style=\"padding:2px 14px 2px 0;color:#5C6B78\">Revisado</td><td>' +\n    esc(f.ahora || '') + '</td></tr>' +\n    '</table>' +\n    '<p>Revisa la ejecución del workflow <code>tes/respaldo</code> en n8n.</p>' +\n    '<p style=\"color:#5C6B78;font-size:12px\">Las fechas van en UTC, que es como las guarda ' +\n    'Postgres. Monterrey va seis horas atrás.</p>' +\n    '</div>';\n\n  salida = {\n    json: {\n      ok: true,\n      correo_destino: correoDestino,\n      correo_origen: correoOrigen,\n      asunto: asunto,\n      ultimo: ultimo,\n      ahora: f.ahora || null,\n      /* El remitente va en la URL del nodo siguiente y sale de\n         `correo_origen`. La política de acceso de Azure acota la\n         aplicación a sales@fts.mx: otra casilla daría 403. */\n      graph: {\n        message: {\n          subject: asunto,\n          body: { contentType: 'HTML', content: html },\n          toRecipients: [{ emailAddress: { address: correoDestino } }]\n        },\n        saveToSentItems: true\n      }\n    }\n  };\n} catch (e) {\n  /* Si hasta el aviso se cae, que salga uno mínimo: quedarse callado aquí\n     es quedarse sin el único testigo de que el respaldo no corrió. */\n  const f = $input.first().json || {};\n  const asunto = 'Tesorería Escolar: no hubo respaldo (y el aviso falló)';\n  const html = '<p>No hubo respaldo en 24 horas, y este aviso no se pudo armar bien.</p>' +\n               '<p style=\"color:#5C6B78;font-size:12px\">' +\n               String((e && e.message) || '').slice(0, 200) + '</p>';\n  salida = {\n    json: {\n      ok: false,\n      error: 'AVISO_FALLO',\n      correo_destino: f.correo_destino || '',\n      correo_origen: f.correo_origen || '',\n      asunto: asunto,\n      graph: {\n        message: {\n          subject: asunto,\n          body: { contentType: 'HTML', content: html },\n          toRecipients: [{ emailAddress: { address: f.correo_destino || '' } }]\n        },\n        saveToSentItems: true\n      }\n    }\n  };\n}\n\nreturn [salida];\n"
       },
-      "id": "6ced54a8-4b16-462c-8e96-84885b5b8355",
-      "name": "Avisar",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
+      "id": "38b56c56-c5d5-4f4b-8d6c-4dab6de6fb19",
+      "name": "Code - Armar aviso",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         600,
         0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $json.correo_origen }}/sendMail",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.graph) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "5f162bd8-e58b-4f47-8af9-6e2bfe0aae00",
+      "name": "Avisar (Graph)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        0
       ],
+      "alwaysOutputData": true,
       "credentials": {
-        "smtp": {
-          "id": "REEMPLAZAR_CRED_SMTP",
-          "name": "tesoreria-escolar · correo"
+        "oAuth2Api": {
+          "id": "REEMPLAZAR_CRED_GRAPH",
+          "name": "Microsoft Graph - sales"
         }
       }
     }
@@ -136,12 +160,23 @@
       "main": [
         [
           {
-            "node": "Avisar",
+            "node": "Code - Armar aviso",
             "type": "main",
             "index": 0
           }
         ],
         []
+      ]
+    },
+    "Code - Armar aviso": {
+      "main": [
+        [
+          {
+            "node": "Avisar (Graph)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },

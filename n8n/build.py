@@ -27,7 +27,10 @@ OUT  = os.path.join(AQUI, 'workflows')
 CRED_APP = {"id": "REEMPLAZAR_CRED_APP_RW",  "name": "tesoreria-escolar-db · app_rw"}
 # Solo la usa tes/validar-token. Ver db/003_config.sql.
 CRED_CFG = {"id": "REEMPLAZAR_CRED_CONFIG_RO", "name": "tesoreria-escolar-db · config_ro"}
-CRED_SMTP= {"id": "REEMPLAZAR_CRED_SMTP",    "name": "tesoreria-escolar · correo"}
+# No hay credencial SMTP en esta instancia: el correo de FTS sale por
+# Microsoft Graph con una credencial OAuth2 de aplicacion. Se copia el
+# patron de comercial/cotizacion, que ya lo usa en produccion.
+CRED_GRAPH = {"id": "REEMPLAZAR_CRED_GRAPH", "name": "Microsoft Graph - sales"}
 ID_VALIDAR = "REEMPLAZAR_ID_VALIDAR_TOKEN"
 
 # El navegador solo puede llamar a estos webhooks desde el dominio de la
@@ -120,6 +123,33 @@ def n_pg(wf, nombre, pos, query="={{ $json.sql }}", params="={{ $json.params }}"
             "id": nid(wf, nombre), "name": nombre, "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.7, "position": pos,
             "credentials": {"postgres": dict(cred or CRED_APP)}}
+
+def n_graph(wf, nombre, pos):
+    """POST a Graph sendMail. El sobre completo lo arma el nodo Code de
+    antes y viaja en $json.graph; aqui solo se serializa.
+
+    El REMITENTE va en la URL y sale de config_app.correo_origen: el
+    correo no se escribe en el repo, que es publico. La politica de
+    acceso de Azure acota la aplicacion a una sola casilla, asi que si
+    correo_origen fuera otra, Graph contesta 403 y el vigia lo grita.
+
+    fullResponse + neverError: se quiere LEER el codigo, no que el nodo
+    lance. Quien decide si hubo envio es el nodo siguiente, mirando el
+    202. Exito para Graph = 202 con cuerpo vacio."""
+    return {"parameters": {
+                "method": "POST",
+                "url": "=https://graph.microsoft.com/v1.0/users/{{ $json.correo_origen }}/sendMail",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "oAuth2Api",
+                "sendBody": True, "contentType": "raw",
+                "rawContentType": "application/json",
+                "body": "={{ JSON.stringify($json.graph) }}",
+                "options": {"response": {"response": {"fullResponse": True,
+                                                      "neverError": True}}}},
+            "id": nid(wf, nombre), "name": nombre,
+            "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": pos,
+            "alwaysOutputData": True,
+            "credentials": {"oAuth2Api": dict(CRED_GRAPH)}}
 
 def n_respond(wf, pos):
     return {"parameters": {"respondWith": "json", "responseBody": "={{ JSON.stringify($json) }}",
@@ -311,18 +341,12 @@ respaldo = wf('tes/respaldo',
     "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.4, "position": [0, 0]},
    n_pg('respaldo', 'Postgres - Volcar tablas', [200, 0], query=SQL_RESPALDO, params="={{ [] }}"),
    n_code('respaldo', 'Code - Armar respaldo', 'respaldo-correo.js', [400, 0]),
-   {"parameters": {"fromEmail": "={{ $json.correo_origen }}",
-                   "toEmail": "={{ $json.correo_destino }}",
-                   "subject": "={{ $json.asunto }}", "emailFormat": "html",
-                   "html": "={{ $json.html }}",
-                   "options": {"fileAttachments": "respaldo", "appendAttribution": False}},
-    "id": nid('respaldo', 'Correo'), "name": "Enviar respaldo",
-    "type": "n8n-nodes-base.emailSend", "typeVersion": 2.1, "position": [600, 0],
-    "credentials": {"smtp": dict(CRED_SMTP)}},
-   n_pg('respaldo', 'Postgres - Marcar respaldo', [800, 0],
+   n_graph('respaldo', 'Enviar respaldo (Graph)', [600, 0]),
+   n_code('respaldo', 'Code - ¿Confirmado?', 'respaldo-confirmar.js', [800, 0]),
+   n_pg('respaldo', 'Postgres - Marcar respaldo', [1000, 0],
         query=("SELECT bitacora_escribir(NULL, 'respaldo', 'sistema', NULL, NULL,"
                " $1::jsonb, NULL) AS bid"),
-        params="={{ [JSON.stringify({conteos: $('Code - Armar respaldo').first().json.conteos || {}})] }}")])
+        params="={{ [JSON.stringify({conteos: $json.conteos || {}})] }}")])
 
 # ---------------------------------------------------------------- 7
 SQL_VIGIA = """
@@ -348,21 +372,11 @@ vigia = wf('tes/vigia',
                    "looseTypeValidation": True, "options": {}},
     "id": nid('vigia', 'IF'), "name": "¿Falta respaldo?", "type": "n8n-nodes-base.if",
     "typeVersion": 2.2, "position": [400, 0]},
-   {"parameters": {"fromEmail": "={{ $json.correo_origen }}",
-                   "toEmail": "={{ $json.correo_destino }}",
-                   "subject": "⚠️ Tesorería Escolar: no hubo respaldo",
-                   "emailFormat": "html",
-                   "html": ("=<p>El respaldo de las 3:00 am no dejó rastro en las últimas 24 horas.</p>"
-                            "<p>Último respaldo registrado: <b>{{ $json.ultimo || 'ninguno' }}</b><br>"
-                            "Revisado: {{ $json.ahora }}</p>"
-                            "<p>Revisa la ejecución del workflow <code>tes/respaldo</code> en n8n.</p>"),
-                   "options": {"appendAttribution": False}},
-    "id": nid('vigia', 'Correo'), "name": "Avisar", "type": "n8n-nodes-base.emailSend",
-    "typeVersion": 2.1, "position": [600, 0],
-    "credentials": {"smtp": dict(CRED_SMTP)}}])
+   n_code('vigia', 'Code - Armar aviso', 'vigia-correo.js', [600, 0]),
+   n_graph('vigia', 'Avisar (Graph)', [800, 0])])
 
 # El IF solo sigue por su salida verdadera.
-vigia["connections"]["¿Falta respaldo?"] = {"main": [[{"node": "Avisar", "type": "main", "index": 0}], []]}
+vigia["connections"]["¿Falta respaldo?"] = {"main": [[{"node": "Code - Armar aviso", "type": "main", "index": 0}], []]}
 
 TODOS = [validar, auth, lectura, presupuestos, tesoreria, admin, respaldo, vigia]
 
