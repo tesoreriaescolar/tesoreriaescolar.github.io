@@ -178,7 +178,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:26px;line-
 </div>
 
 <script>
-const VERSION='V1.10';
+const VERSION='V1.11';
 
 /* =========================================================
    CAPA API — habla con n8n. Cada función es un fetch al
@@ -216,6 +216,16 @@ async function pide(ruta,accion,datos){
 
   if(!r.ok&&!j){
     const err=new Error('El servidor no contestó bien. Vuelve a intentar en un momento.');
+    err.clase='servidor';throw err;
+  }
+  /* 200 con el cuerpo VACÍO. Pasa cuando el workflow corre pero se queda
+     a medias y n8n cierra la petición por su cuenta — le ocurrió al login
+     el 17-sep-2026. Tiene su propio mensaje porque el genérico de abajo
+     dice "no se pudo guardar el cambio", que al entrar es sencillamente
+     falso: no se estaba guardando nada. Un mensaje equivocado manda a
+     buscar el problema al lugar equivocado. */
+  if(r.ok&&!j){
+    const err=new Error('El servidor contestó vacío. No es tu internet: avisa que revisen el flujo.');
     err.clase='servidor';throw err;
   }
   if(j&&j.ok)return j;
