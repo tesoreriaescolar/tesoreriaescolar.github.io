@@ -80,16 +80,33 @@ switch (pet.accion) {
     const tipo = d.tipo === 'salon' ? 'salon' : 'generacion';
     const grupo = d.grupo_id;
     if (!grupo) return no('FALTA_GRUPO');
+    /* Ventana anti-repetido, igual que en gasto_crear: si ya hay un
+       presupuesto idéntico en el mismo ciclo y salón creado hace menos
+       de 20 segundos, se devuelve ESE en vez de crear otro. El porqué
+       completo está en tesoreria-armar.js, caso gasto_crear. */
     sql = `
-      WITH antes AS (SELECT NULL::jsonb AS j)
+      WITH gemelo AS (
+          SELECT p.id FROM presupuestos p
+           WHERE p.ciclo_id = $5::bigint AND p.grupo_id = $7::bigint
+             AND p.nombre = $6::text AND p.tipo = $9::text
+             AND p.fecha IS NOT DISTINCT FROM $8::date
+             AND p.creado_en > now() - interval '20 seconds'
+             AND ($2::text = 'admin' OR ($2::text = 'rep' AND $7::bigint = $3::bigint))
+           ORDER BY p.id DESC LIMIT 1
+        )
+      , antes AS (SELECT NULL::jsonb AS j)
       , upd AS (
           INSERT INTO presupuestos (ciclo_id, grupo_id, nombre, fecha, tipo, estado)
           SELECT $5::bigint, $7::bigint, $6::text, $8::date, $9::text, 'creacion'
            WHERE ($2::text = 'admin' OR ($2::text = 'rep' AND $7::bigint = $3::bigint))
              AND EXISTS (SELECT 1 FROM grupos g WHERE g.id = $7::bigint AND g.ciclo_id = $5::bigint)
+             AND NOT EXISTS (SELECT 1 FROM gemelo)
           RETURNING id, to_jsonb(presupuestos.*) AS j
         )${LOG('crear', 'presupuestos')}
-      ${CIERRE}`;
+      SELECT (SELECT count(*) FROM upd) + (SELECT count(*) FROM gemelo) AS afectadas,
+             COALESCE((SELECT max(id) FROM upd), (SELECT id FROM gemelo)) AS id,
+             (SELECT count(*) FROM log) AS logs,
+             (SELECT count(*) FROM gemelo) > 0 AS repetido`;
     params = base.concat([String(d.nombre || ''), grupo, d.fecha || null, tipo]);
     break;
   }

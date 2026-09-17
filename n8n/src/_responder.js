@@ -20,7 +20,10 @@ try {
     if (Object.prototype.hasOwnProperty.call(fila, 'afectadas')) {
       const n = Number(fila.afectadas || 0);
       salida = n > 0
-        ? { ok: true, afectadas: n, id: fila.id === undefined ? null : String(fila.id) }
+        ? { ok: true, afectadas: n, id: fila.id === undefined ? null : String(fila.id),
+            // true cuando la ventana anti-repetido encontro un gemelo y
+            // NO se inserto nada. La pantalla lo dice en vez de fingir.
+            repetido: fila.repetido === true }
         // Cero renglones tocados con sesión válida significa que el
         // WHERE excluyó el renglón: o no existe, o no es suyo. A quien
         // pregunta se le dice lo mismo en los dos casos, a propósito:
