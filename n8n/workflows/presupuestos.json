@@ -253,9 +253,9 @@
   "settings": {
     "executionOrder": "v1",
     "timezone": "America/Monterrey",
-    "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all",
-    "saveManualExecutions": true
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false
   },
   "meta": {
     "descripcion": "Crear, editar, confirmar, devolver, prestar y eliminar. Confirmar congela el total en eventos.total_congelado. El vencimiento del prestamo se mide contra now() del servidor."
