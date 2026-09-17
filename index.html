@@ -209,7 +209,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:26px;line-
 </div>
 
 <script>
-const VERSION='V1.17';
+const VERSION='V1.18';
 
 /* =========================================================
    CAPA API — habla con n8n. Cada función es un fetch al
@@ -386,14 +386,34 @@ const api={
     await refresca();
   },
 
-  /* Devuelve la respuesta, no nada: trae `repetido` cuando el servidor
-     encontró un gemelo recién capturado y NO insertó otro, y la pantalla
-     lo dice en vez de fingir que registró algo. */
+  /* Devuelve la respuesta para que la pantalla pueda decir si el gasto
+     de verdad se registró o si la ventana anti-repetido devolvió el que
+     ya estaba.
+
+     Se decide por DOS caminos, y con que uno diga que sí basta:
+
+       · `repetido`, que manda el servidor. Es el bueno.
+       · el `id` que vuelve YA ESTABA entre los gastos del evento antes
+         de pedir. Eso no es adivinar: el id lo da el servidor, y un id
+         que ya conocíamos no puede ser de un renglón recién creado.
+
+     El segundo existe porque el nodo que responde en tes/tesoreria lleva
+     la criptografía de los tickets pegada, y reemplazarlo a mano para
+     agregar un campo es justo lo que no se hace con código así (regla de
+     n8n/README.md: nunca transcribir un nodo, modificarlo
+     programáticamente). Hasta que ese nodo se reconstruya desde el repo,
+     `repetido` no llega por esa ruta — y el aviso tiene que salir igual.
+
+     Importa porque sin aviso, dos toques dicen "registrado" dos veces y
+     quien captura concluye que hay dos. Con el botón de eliminar a un
+     lado, eso invita a borrar el único que quedó. */
   async addGasto(e,g){
+    const antes=new Set(((ev(e)||{}).gastos||[]).map(x=>String(x.id)));
     const j=await pide('tesoreria','gasto_crear',
       {evento_id:e,fecha:g.f,descripcion:g.d,proveedor:g.p,monto:g.m});
     await refresca();
-    return j;
+    const yaEstaba=j&&j.id!=null&&antes.has(String(j.id));
+    return Object.assign({},j,{repetido:(j&&j.repetido===true)||!!yaEstaba});
   },
   async delGasto(e,id){ await pide('tesoreria','gasto_eliminar',{evento_id:e,gasto_id:id}); await refresca(); },
   async delEvento(id){ await pide('tesoreria','evento_eliminar',{evento_id:id}); await refresca(); },
