@@ -172,13 +172,13 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:26px;line-
   <div class="tabs" role="tablist" id="tabs"></div>
   <section id="view"></section>
   <footer>
-    <button class="copy" onclick="miPassword()">Cambiar mi contraseña</button><br>
+    <button class="copy" id="btnMiPass" onclick="miPassword()">Cambiar mi contraseña</button><br>
     <button class="copy" onclick="avisoLegal()">© 2026 Servicios FTS S.A. de C.V. y FTS Full Technology Systems LLC.<br>Todos los derechos reservados.</button>
   </footer>
 </div>
 
 <script>
-const VERSION='V1.11';
+const VERSION='V1.12';
 
 /* =========================================================
    CAPA API — habla con n8n. Cada función es un fetch al
@@ -570,7 +570,7 @@ async function entrar(){
   try{
     document.getElementById('login').hidden=true;
     document.getElementById('app').hidden=false;
-    document.getElementById('whoSub').textContent=ses.nom;
+    pintaSesion();
     pintaTabs();draw();window.scrollTo(0,0);
   }catch(err){e.textContent='Algo falló al abrir el tablero: '+err.message;e.hidden=false;
     document.getElementById('login').hidden=false;document.getElementById('app').hidden=true}
@@ -597,13 +597,23 @@ function salir(){
     preView='lista';fSalon='todos';fEstado='todos';fTipo='todos';fAlc='auto';selE='todos';tab='tes';
     document.getElementById('login').hidden=true;
     document.getElementById('app').hidden=false;
-    document.getElementById('whoSub').textContent=ses.nom;
+    pintaSesion();
     pintaTabs();draw();
   }catch(err){
     TOKEN=null;
     try{ localStorage.removeItem(LLAVE_SESION); }catch(e){}
   }
 })();
+/* Quién está dentro se pinta en DOS lugares y desde UNO solo: la
+   cabecera y el botón del pie. El del pie cambia la contraseña de
+   QUIEN ESTÁ EN LA SESIÓN —no la de nadie más— y decirlo con el
+   usuario adentro es la única forma de que no se confunda con el
+   botón de Configuración, que sí es para restablecer la ajena. */
+function pintaSesion(){
+  document.getElementById('whoSub').textContent=ses.nom;
+  const b=document.getElementById('btnMiPass');
+  if(b)b.textContent='Cambiar mi contraseña ('+ses.u+')';
+}
 function pintaTabs(){
   const t=[['tes','Tesorería']];
   if(ses.rol!=='mama')t.push(['pre','Presupuestos']);
@@ -1133,12 +1143,12 @@ function vistaCfg(){
       <select ${bloq} onchange="setUser('${x.id}',{activo:this.value==='si'})">
         <option value="si" ${x.activo?'selected':''}>Activa</option>
         <option value="no" ${!x.activo?'selected':''}>Desactivada</option></select></div>
-    <div class="field"><label>Contraseña</label>
-      <button class="btn ghost" onclick="nuevaClave('${x.id}','${esc(x.u)}')">Poner una nueva</button></div>
-    ${yo?`<p class="hint">Tus propios permisos no se editan desde aquí, para que nadie —ni tú— se quede fuera por accidente. Tu contraseña la cambias con el enlace del pie.</p>`:''}
+    <div class="field"><label>Si olvidó su contraseña</label>
+      <button class="btn ghost" onclick="nuevaClave('${x.id}','${esc(x.u)}')">Restablecer la de ${esc(x.u)}</button></div>
+    ${yo?`<p class="hint">Tus propios permisos no se editan desde aquí, para que nadie —ni tú— se quede fuera por accidente. Tu propia contraseña la cambias con el botón del pie, el que lleva tu usuario.</p>`:''}
   </div>`}).join('')}
   <div class="card"><button class="addrow" onclick="nuevaPersona()">Dar de alta a alguien</button>
-    <p class="hint">La contraseña nunca se guarda ni se muestra en claro: se guarda revuelta y no hay forma de leerla de vuelta. Si alguien la olvida, le pones una nueva.</p></div>
+    <p class="hint">La contraseña nunca se guarda ni se muestra en claro: se guarda revuelta y no hay forma de leerla de vuelta. Si alguien la olvida, no se puede recuperar: se la restableces desde su tarjeta de arriba, sin necesidad de saber la anterior.</p></div>
 
   <h2>Pasar de año</h2>
   <div class="card">
@@ -1162,7 +1172,7 @@ async function setPerm(id,llave,valor){
   await conAviso(()=>api.setUsuario(id,{permisos:p}),'Permisos actualizados.');
 }
 function nuevaClave(id,usuario){
-  modal(`<h3>Contraseña nueva</h3><p>Para ${esc(usuario)}. Mínimo 8 caracteres. Al guardar, la anterior deja de servir.</p>
+  modal(`<h3>Restablecer contraseña</h3><p>Le vas a poner una contraseña nueva a <b>${esc(usuario)}</b>. No necesitas saber la anterior: al guardar deja de servir. Mínimo 8 caracteres. Apúntala y dásela, porque no se puede volver a leer.</p>
     <div class="inp"><label for="nc-p">Contraseña</label><input id="nc-p" type="text" autocomplete="off"></div>
     <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Guardar</button></div>`,
   (m,cierra)=>{
@@ -1170,7 +1180,7 @@ function nuevaClave(id,usuario){
     m.querySelector('[data-si]').onclick=async()=>{
       const v=m.querySelector('#nc-p').value;
       if(v.length<8)return toast('Tiene que ser de al menos 8 caracteres.');
-      cierra();await conAviso(()=>api.ponerClave(id,v),'Contraseña actualizada.');
+      cierra();await conAviso(()=>api.ponerClave(id,v),'Contraseña de '+usuario+' restablecida.');
     };
     m.querySelector('#nc-p').focus();
   });
