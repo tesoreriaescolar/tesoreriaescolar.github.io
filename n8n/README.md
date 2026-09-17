@@ -158,6 +158,25 @@ aws s3api get-bucket-cors --bucket tesoreria-tickets-qffkcft `
 Un solo origen, el de la aplicación. **Ver** la foto no necesita CORS —va
 por `<img src>`, no por `fetch`—; `GET` y `HEAD` van por si acaso.
 
+**5-quater. 📌 BACKLOG: las fotos de tickets se quedan huérfanas al borrar.**
+`gasto_eliminar` borra el renglón pero **no borra el objeto del bucket**. La
+llave se va con el renglón, así que la foto queda ahí sin nada que apunte a
+ella y sin forma de firmarle una URL. Lo mismo, en grande, al borrar un
+evento: `gastos.evento_id` es `ON DELETE CASCADE`, así que se lleva todos
+sus gastos de golpe y todas sus fotos quedan huérfanas.
+
+**No es un hoyo de privacidad** —el bucket sigue siendo privado y nadie
+puede firmar una URL para algo cuya llave ya no existe— pero **se acumula y
+se paga** ($0.015 por GB-mes). Con las fotos de un ciclo escolar es
+calderilla; con varios años, no tanto.
+
+Las dos formas de saldarlo, cuando toque:
+- borrar el objeto en la misma acción, lo que mete una llamada al bucket
+  dentro de una transacción de base de datos —y si el bucket falla, ¿se
+  revierte el borrado?—;
+- o una limpieza periódica que liste el bucket y borre lo que ninguna fila
+  referencia, que es más lenta pero no acopla las dos cosas. **Esta.**
+
 **5-ter. ⚠️ Un nodo con criptografía pegada NO se edita transcribiéndolo.**
 `Code - Firmar URL y responder` de `tes/tesoreria` son 17.5 KB, y la mayor
 parte es `lib-cripto` + `lib-s3` inyectadas por `build.py`. Cambiar un solo
