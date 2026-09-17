@@ -178,7 +178,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:26px;line-
 </div>
 
 <script>
-const VERSION='V1.12';
+const VERSION='V1.13';
 
 /* =========================================================
    CAPA API — habla con n8n. Cada función es un fetch al
@@ -376,7 +376,30 @@ const api={
     try{
       r=await fetch(f.url,{method:'PUT',body:archivo,
         headers:{'Content-Type':archivo.type||'application/octet-stream'}});
-    }catch(err){ const x=new Error('No se pudo subir la foto. Revisa tu internet.');x.clase='red';throw x; }
+    }catch(err){
+      /* Aquí el fetch LANZÓ, o sea que no hubo respuesta que mirar. Eso
+         pasa por dos motivos muy distintos y hay que separarlos, porque
+         llevan a acciones distintas:
+
+           · sin señal            → volver a intentar sirve
+           · el navegador lo cortó → volver a intentar NO sirve nunca
+
+         Lo segundo es lo que pasó el 17-sep-2026: el bucket no tenía
+         ninguna regla de CORS, así que su verificación previa contestaba
+         200 sin una sola cabecera access-control-*, el navegador cortaba
+         el PUT antes de mandarlo, y el mensaje de entonces —«revisa tu
+         internet»— mandó a buscar el problema al lugar equivocado.
+
+         `navigator.onLine` en false es prueba de que no hay red; en true
+         no prueba nada (dice que hay tarjeta de red, no que haya paso),
+         así que solo se usa para el caso claro. */
+      const sinRed = (typeof navigator !== 'undefined' && navigator.onLine === false);
+      const x = sinRed
+        ? new Error('Sin conexión. La foto no salió de tu teléfono: vuelve a intentar cuando tengas señal.')
+        : new Error('El almacén de fotos rechazó la subida antes de empezar. No es tu internet — repórtalo para que revisen los permisos del almacén.');
+      x.clase = sinRed ? 'red' : 'servidor';
+      throw x;
+    }
     if(!r.ok){ const x=new Error('El archivo no se pudo guardar. Vuelve a intentar.');x.clase='servidor';throw x; }
     await pide('tesoreria','ticket_fijar',
       {evento_id:e,gasto_id:gid,ticket_key:f.ticket_key,nombre:archivo.name});
@@ -780,17 +803,32 @@ function verTicket(eId,gId){
       <div class="dropzone" id="tk-cargando">Cargando la foto…</div>
       <p>${esc(g.ticket.nombre)} · lo subió ${esc(g.ticket.por)} el ${fchHora(g.ticket.cuando)}</p>`
     :`<div class="dropzone">Todavía no hay ticket de este gasto.</div>`;
+  /* `capture` abre la cámara en el celular, pero en varios navegadores
+     TAPA la galería: el que lo lleva no puede elegir una foto que ya
+     tomó. Por eso van dos entradas de archivo y dos botones, no un
+     `capture` en la única que había.
+
+     El botón de cámara solo se ofrece donde hay dedo (`pointer: coarse`).
+     En una laptop `capture` se ignora y el botón abriría el mismo
+     explorador de archivos que el otro: dos botones para lo mismo. */
+  const conCamara = (typeof matchMedia === 'function') && matchMedia('(pointer: coarse)').matches;
+  const rotulo = g.ticket ? 'Cambiar foto' : 'Cargar ticket';
   const acciones=puede
     ?`<div class="actions">
         ${g.ticket?`<button class="btn danger" data-del>Quitar</button>`:''}
-        <button class="btn" data-up>${g.ticket?'Cambiar foto':'Cargar ticket'}</button></div>`
+        ${conCamara?`<button class="btn ghost" data-cam>Tomar foto</button>`:''}
+        <button class="btn" data-up>${conCamara?'Elegir archivo':rotulo}</button></div>
+      ${g.ticket?`<p class="hint">La foto nueva reemplaza a la de ahora.</p>`:''}`
     :`<p class="hint">${g.ticket?'Solo quien lleva la tesorería de este evento puede cambiarlo.':'Solo quien lleva la tesorería de este evento puede cargarlo.'}</p>`;
   modal(`<h3>${esc(g.d)}</h3><p>${esc(g.p)} · ${fch(g.f)} · ${mx(g.m)}</p>${cuerpo}
-    <input type="file" accept="image/*" id="tk-file" hidden>${acciones}
+    <input type="file" accept="image/*" id="tk-file" hidden>
+    <input type="file" accept="image/*" capture="environment" id="tk-cam" hidden>${acciones}
     <div class="actions"><button class="btn ghost" data-close>Cerrar</button></div>`,
   (m,cierra)=>{
     m.querySelector('[data-close]').onclick=cierra;
-    const up=m.querySelector('[data-up]'),del=m.querySelector('[data-del]'),file=m.querySelector('#tk-file');
+    const up=m.querySelector('[data-up]'),del=m.querySelector('[data-del]');
+    const cam=m.querySelector('[data-cam]');
+    const file=m.querySelector('#tk-file'),foto=m.querySelector('#tk-cam');
 
     if(g.ticket){
       const img=m.querySelector('#tk-img'),cargando=m.querySelector('#tk-cargando');
@@ -802,18 +840,28 @@ function verTicket(eId,gId){
     }
 
     if(up)up.onclick=()=>file.click();
-    if(file)file.onchange=async()=>{
-      const f=file.files[0];if(!f)return;
-      if(f.size>8*1024*1024)return toast('La foto pesa más de 8 MB. Tómala en menor calidad.');
-      up.disabled=true;up.textContent='Subiendo…';
+    if(cam)cam.onclick=()=>foto.click();
+
+    /* Las dos entradas suben igual. El texto del botón se GUARDA antes
+       de cambiarlo: antes se restauraba siempre a 'Cargar ticket', y al
+       fallar un reemplazo el botón se quedaba mintiendo. */
+    const sube=async(entrada,boton)=>{
+      const f=entrada.files[0];if(!f)return;
+      if(f.size>8*1024*1024){entrada.value='';return toast('La foto pesa más de 8 MB. Tómala en menor calidad.')}
+      const antes=boton.textContent;
+      [up,cam].forEach(b=>{if(b)b.disabled=true});
+      boton.textContent='Subiendo…';
       try{
         await api.subirTicket(eId,gId,f);
         cierra();draw();toast('Ticket cargado.');
       }catch(err){
-        up.disabled=false;up.textContent='Cargar ticket';
+        [up,cam].forEach(b=>{if(b)b.disabled=false});
+        boton.textContent=antes;entrada.value='';
         toast(err.message);falloSesion(err);
       }
     };
+    if(file)file.onchange=()=>sube(file,up);
+    if(foto)foto.onchange=()=>sube(foto,cam||up);
     if(del)del.onclick=async()=>{
       if(!await confirmar('Quitar ticket',`Se va a borrar la foto del ticket de "${g.d}". El gasto se queda.`,'Quitar'))return;
       try{ await api.quitarTicket(eId,gId);cierra();draw();toast('Ticket quitado.'); }
