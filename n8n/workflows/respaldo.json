@@ -1,0 +1,176 @@
+{
+  "name": "tes/respaldo",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 3,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "bb9eb7ae-4a2b-443b-8c43-62ef47835125",
+      "name": "Cron 3:00 am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT json_build_object(\n  'ciclos',       (SELECT COALESCE(json_agg(to_jsonb(t)), '[]'::json) FROM ciclos t),\n  'grupos',       (SELECT COALESCE(json_agg(to_jsonb(t)), '[]'::json) FROM grupos t),\n  'personas',     (SELECT COALESCE(json_agg(to_jsonb(t)), '[]'::json) FROM personas t),\n  'membresias',   (SELECT COALESCE(json_agg(to_jsonb(t)), '[]'::json) FROM membresias t),\n  'presupuestos', (SELECT COALESCE(json_agg(to_jsonb(t)), '[]'::json) FROM presupuestos t),\n  'eventos',      (SELECT COALESCE(json_agg(to_jsonb(t)), '[]'::json) FROM eventos t),\n  'evento_grupo', (SELECT COALESCE(json_agg(to_jsonb(t)), '[]'::json) FROM evento_grupo t),\n  'gastos',       (SELECT COALESCE(json_agg(to_jsonb(t)), '[]'::json) FROM gastos t),\n  -- La bitacora NO se puede leer con app_rw a proposito (ver 002). Del\n  -- respaldo va el CONTEO, que es lo que permite notar si alguien la\n  -- truncara por fuera, y los movimientos del dia van por la funcion.\n  'bitacora',     '[]'::json,\n  'movimientos',  '[]'::json\n) AS datos",
+        "options": {
+          "queryReplacement": "={{ [] }}",
+          "queryBatching": "single",
+          "largeNumbersOutput": "numbers"
+        }
+      },
+      "id": "9360ae35-773a-46ff-822d-58b58b1783bc",
+      "name": "Postgres - Volcar tablas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        200,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REEMPLAZAR_CRED_APP_RW",
+          "name": "tesoreria-db · app_rw"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/* Nodo: \"Code - Armar respaldo\"  (workflow tes/respaldo, 3:00 am)\n\n   Toma el volcado de las nueve tablas y arma:\n     - el archivo JSON adjunto\n     - el cuerpo del correo con el resumen y los movimientos del día\n\n   Dos reglas del encargo se cumplen aquí y se ven en el código:\n     1. La CLABE va ENMASCARADA: solo los últimos 4.\n     2. Las FOTOS no van. Solo sus llaves. */\n\nlet salida;\ntry {\n  const d = ($input.first().json || {}).datos || {};\n\n  // --- 1. Enmascarar la CLABE antes de que toque el archivo ---------\n  const ultimos4 = (c) => {\n    const s = String(c || '');\n    return s.length >= 4 ? '•'.repeat(Math.max(0, s.length - 4)) + s.slice(-4) : (s ? '••••' : '');\n  };\n  (d.presupuestos || []).forEach((p) => { p.clabe = ultimos4(p.clabe); });\n\n  // --- 2. Los hashes tampoco van --------------------------------------\n  // No se pidió, pero un respaldo por correo con los hashes adentro es\n  // un respaldo que hay que cuidar como si fuera la base. Así no.\n  (d.personas || []).forEach((p) => { delete p.hash; });\n\n  const hoy = new Date().toISOString().slice(0, 10);\n  const conteos = {};\n  const NUEVE = ['ciclos','grupos','personas','membresias','presupuestos',\n                 'eventos','evento_grupo','gastos','bitacora'];\n  NUEVE.forEach((t) => { conteos[t] = (d[t] || []).length; });\n\n  const archivo = JSON.stringify({\n    _meta: {\n      generado: new Date().toISOString(),\n      fecha: hoy,\n      tablas: NUEVE,\n      conteos: conteos,\n      nota: 'La CLABE va enmascarada (ultimos 4). Los hashes de contrasena no se incluyen. Las fotos de tickets NO estan aqui: solo su ticket_key en el bucket.'\n    },\n    datos: d\n  }, null, 1);\n\n  const movs = d.movimientos || [];\n  const fila = (m) => `<tr><td style=\"padding:4px 10px;border-bottom:1px solid #e5e5e5\">${\n      String(m.cuando || '').slice(11, 16)}</td><td style=\"padding:4px 10px;border-bottom:1px solid #e5e5e5\">${\n      esc(m.quien || 'sistema')}</td><td style=\"padding:4px 10px;border-bottom:1px solid #e5e5e5\">${\n      esc(m.accion)}</td><td style=\"padding:4px 10px;border-bottom:1px solid #e5e5e5\">${esc(m.tabla)}</td></tr>`;\n\n  const html = `\n    <div style=\"font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;color:#13202B\">\n      <h2 style=\"margin:0 0 4px\">Respaldo de Tesorería Escolar</h2>\n      <p style=\"color:#5C6B78;margin:0 0 16px\">${hoy} · ciclo ${esc((d.ciclos || []).filter((c) => c.activo).map((c) => c.nombre)[0] || '—')}</p>\n      <table style=\"border-collapse:collapse;margin-bottom:18px\">\n        ${NUEVE.map((t) => `<tr><td style=\"padding:2px 14px 2px 0\">${t}</td><td style=\"text-align:right\">${conteos[t]}</td></tr>`).join('')}\n      </table>\n      <h3 style=\"margin:0 0 6px\">Movimientos de las últimas 24 horas (${movs.length})</h3>\n      ${movs.length\n        ? `<table style=\"border-collapse:collapse;font-size:13px\"><tr style=\"text-align:left;color:#5C6B78\">\n             <th style=\"padding:4px 10px\">Hora</th><th style=\"padding:4px 10px\">Quién</th>\n             <th style=\"padding:4px 10px\">Acción</th><th style=\"padding:4px 10px\">Tabla</th></tr>\n           ${movs.map(fila).join('')}</table>`\n        : '<p style=\"color:#5C6B78\">Sin movimientos.</p>'}\n      <p style=\"color:#5C6B78;font-size:12px;margin-top:20px\">\n        El archivo adjunto trae las nueve tablas. La CLABE va enmascarada (solo los últimos 4) y\n        los hashes de contraseña no se incluyen. Las fotos de los tickets no viajan aquí: en su\n        lugar va la llave de cada una en el bucket.</p>\n    </div>`;\n\n  function esc(s) {\n    return String(s === null || s === undefined ? '' : s)\n      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\n  }\n\n  salida = {\n    json: {\n      ok: true,\n      asunto: `Respaldo Tesorería Escolar · ${hoy} · ${movs.length} movimiento(s)`,\n      html: html,\n      conteos: conteos,\n      movimientos: movs.length\n    },\n    binary: {\n      respaldo: {\n        data: Buffer.from(archivo, 'utf8').toString('base64'),\n        mimeType: 'application/json',\n        fileName: `tesoreria-${hoy}.json`\n      }\n    }\n  };\n} catch (e) {\n  // Que el respaldo truene NO puede quedarse callado: el vigía de las\n  // 9 am se entera porque no hay renglón de bitácora, pero además el\n  // correo sale igual diciendo que falló.\n  salida = { json: { ok: false, error: 'RESPALDO_FALLO',\n                     asunto: 'FALLÓ el respaldo de Tesorería Escolar',\n                     html: '<p>El respaldo de las 3:00 am no se pudo armar. Revisa la ejecución en n8n.</p>' } };\n}\n\nreturn [salida];\n"
+      },
+      "id": "c1d3743f-18f7-4ffb-8468-8d5bfdf2b0ef",
+      "name": "Code - Armar respaldo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "REEMPLAZAR@ejemplo.com",
+        "toEmail": "esteban.calderon.iea@gmail.com",
+        "subject": "={{ $json.asunto }}",
+        "emailFormat": "html",
+        "html": "={{ $json.html }}",
+        "options": {
+          "fileAttachments": "respaldo",
+          "appendAttribution": false
+        }
+      },
+      "id": "d174f8e2-c646-41a6-85d2-d95e31424e27",
+      "name": "Enviar respaldo",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        600,
+        0
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "REEMPLAZAR_CRED_SMTP",
+          "name": "tesoreria · correo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT bitacora_escribir(NULL, 'respaldo', 'sistema', NULL, NULL, $1::jsonb, NULL) AS bid",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify({conteos: $('Code - Armar respaldo').first().json.conteos || {}})] }}",
+          "queryBatching": "single",
+          "largeNumbersOutput": "numbers"
+        }
+      },
+      "id": "8667578d-26ed-485b-899f-d9cb42ac2d28",
+      "name": "Postgres - Marcar respaldo",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        800,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REEMPLAZAR_CRED_APP_RW",
+          "name": "tesoreria-db · app_rw"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cron 3:00 am": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Volcar tablas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Volcar tablas": {
+      "main": [
+        [
+          {
+            "node": "Code - Armar respaldo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Armar respaldo": {
+      "main": [
+        [
+          {
+            "node": "Enviar respaldo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar respaldo": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Marcar respaldo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Monterrey",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "meta": {
+    "descripcion": "Cron 3:00 am. Vuelca las nueve tablas a JSON y lo manda por correo con los movimientos del dia. La CLABE va enmascarada (ultimos 4) y los hashes no se incluyen. Las fotos NO van: solo sus llaves. Escribe su propio renglon de bitacora, que es lo que mira el vigia."
+  },
+  "pinData": {}
+}

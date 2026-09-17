@@ -1,0 +1,243 @@
+{
+  "name": "tes/lectura",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tes/lectura",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "26798f1b-984f-47c2-840a-eedabae5d517",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "02bdc954-a61c-4cfe-8f8c-c67c7ee99f7a"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/* Nodo: \"Code - Leer petición\"  (los cinco workflows de API)\n\n   Saca del cuerpo lo mínimo y nada más. No decide nada: quién es y qué\n   puede hacer lo resuelve tes/validar-token en el nodo siguiente.\n\n   La IP se toma de las cabeceras para la bitácora. Es informativa: la\n   manda el cliente y se puede mentir, por eso NO se usa para ninguna\n   decisión, solo se guarda. */\n\nlet salida;\ntry {\n  const w = $input.first().json || {};\n  const b = w.body || {};\n  const h = w.headers || {};\n  const ip = String(h['x-forwarded-for'] || h['x-real-ip'] || '').split(',')[0].trim();\n\n  salida = {\n    token: String(b.token || ''),\n    accion: String(b.accion || ''),\n    datos: (b.datos && typeof b.datos === 'object') ? b.datos : {},\n    ip: ip\n  };\n} catch (e) {\n  salida = { token: '', accion: '', datos: {}, ip: '' };\n}\nreturn [{ json: salida }];\n"
+      },
+      "id": "9f1a986d-4905-4749-8b1e-a7a3361db173",
+      "name": "Code - Leer petición",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REEMPLAZAR_ID_VALIDAR_TOKEN"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "token": "={{ $json.token }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "token",
+              "displayName": "token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "22bd80a3-679f-4517-81ee-9e3142596084",
+      "name": "Validar token",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/* Nodo: \"Code - Armar consulta\"  (workflow tes/lectura)\n\n   Devuelve TODO lo que esa sesión puede ver, en una sola consulta y en\n   un solo renglón de JSON. El frontend lo usa para llenar su caché.\n\n   ⚠️ El filtrado por grupo va en el WHERE, no filtrando la respuesta.\n   Si el WHERE no lo excluye, el dato ya salió de la base y cualquier\n   filtro posterior es decoración: quien mire la respuesta cruda en el\n   navegador lo ve igual. Por eso el predicado de visibilidad está\n   escrito UNA vez, abajo, y se pega a las dos consultas que lo\n   necesitan. */\n\nconst s = $input.first().json || {};\n\nif (!s.ok) {\n  // Sin sesión no se consulta nada. La consulta tiene que ser válida\n  // igual (el nodo de Postgres corre siempre), así que devuelve vacío.\n  return [{ json: {\n    ok: false, error: s.error || 'NO_AUTORIZADO',\n    sql: \"SELECT NULL::json AS datos WHERE false\", params: []\n  } }];\n}\n\n/* $1 ciclo_id · $2 rol · $3 grupo_id · $4 ve_todos_los_grupos\n   Una mamá ve los eventos de generación MÁS los de su propio grupo.\n   Nunca los de otro grupo. Eso es exactamente lo que dice esta línea. */\nconst VISIBLE = (t) =>\n  `($2::text = 'admin' OR $4::boolean OR ${t}.tipo = 'generacion' OR ${t}.grupo_id = $3::bigint)`;\n\nconst sql = `\nSELECT json_build_object(\n\n  -- Quién es quien pregunta, tal como lo resolvió tes/validar-token.\n  -- Va aquí para que recargar la página no obligue a volver a entrar:\n  -- con el token guardado basta una lectura para reconstruir la sesión.\n  -- Viaja como PARÁMETRO ($5), no pegado dentro del SQL.\n  'sesion', $5::json,\n\n  'ciclo', (SELECT json_build_object('id', c.id::text, 'nombre', c.nombre, 'grado', c.grado)\n              FROM ciclos c WHERE c.id = $1::bigint),\n\n  -- Los grupos. De aquí se llena SALONES en el navegador: número,\n  -- nombre y color salen de la base, nunca del código.\n  'grupos', (SELECT COALESCE(json_agg(json_build_object(\n                      'id', g.id::text, 'letra', g.letra,\n                      'nom', g.nombre, 'color', g.color\n                    ) ORDER BY g.orden, g.letra), '[]'::json)\n               FROM grupos g WHERE g.ciclo_id = $1::bigint),\n\n  -- La lista de TODOS los ciclos, para la pantalla de Configuración.\n  -- Solo admin, y vacía desde la base para los demás.\n  'ciclos', (SELECT COALESCE(json_agg(json_build_object(\n                     'id', c.id::text, 'nombre', c.nombre, 'grado', c.grado,\n                     'activo', c.activo,\n                     'grupos', (SELECT count(*) FROM grupos g WHERE g.ciclo_id = c.id),\n                     'personas', (SELECT count(*) FROM membresias m WHERE m.ciclo_id = c.id)\n                   ) ORDER BY c.creado_en DESC), '[]'::json)\n              FROM ciclos c WHERE $2::text = 'admin'),\n\n  -- El padrón solo lo ve la tesorera general. Para los demás va vacío,\n  -- y va vacío DESDE LA BASE, no recortado después.\n  'usuarios', (SELECT COALESCE(json_agg(json_build_object(\n                        'id', p.id::text, 'u', p.usuario, 'nom', p.nombre,\n                        'rol', m.rol, 'salon', m.grupo_id::text,\n                        'tickets', (m.permisos->>'tickets')::boolean,\n                        'verPres', (m.permisos->>'ver_presupuesto')::boolean,\n                        'verTodos', (m.permisos->>'ver_todos_los_grupos')::boolean,\n                        'activo', m.activo\n                      ) ORDER BY m.rol, p.usuario), '[]'::json)\n                 FROM personas p\n                 JOIN membresias m ON m.persona_id = p.id AND m.ciclo_id = $1::bigint\n                WHERE $2::text = 'admin'),\n\n  'presupuestos', (SELECT COALESCE(json_agg(json_build_object(\n                     'id', p.id::text, 'nom', p.nombre,\n                     'fecha', to_char(p.fecha, 'YYYY-MM-DD'),\n                     'tipo', p.tipo, 'salon', p.grupo_id::text, 'estado', p.estado,\n                     'rep', p.responsable, 'ninos', p.ninos, 'ninas', p.ninas,\n                     'adultos', p.adultos, 'c', p.conceptos,\n                     'banco', p.banco, 'clabe', p.clabe, 'titular', p.titular,\n                     -- El préstamo se entrega YA RESUELTO contra now() del\n                     -- SERVIDOR. El navegador no vuelve a comparar fechas:\n                     -- si lo hiciera, atrasar el reloj del celular\n                     -- revivirá un préstamo vencido.\n                     'prestamo', CASE\n                        WHEN p.prestado_a_grupo_id IS NOT NULL AND p.prestamo_hasta > now()\n                        THEN json_build_object('a', p.prestado_a_grupo_id::text,\n                                               'hasta', p.prestamo_hasta)\n                        ELSE NULL END\n                   ) ORDER BY p.fecha NULLS LAST, p.id), '[]'::json)\n                     FROM presupuestos p\n                    WHERE p.ciclo_id = $1::bigint AND ${VISIBLE('p')}),\n\n  'eventos', (SELECT COALESCE(json_agg(json_build_object(\n                'id', e.id::text, 'presId', e.presupuesto_id::text, 'nom', e.nombre,\n                'fecha', to_char(e.fecha, 'YYYY-MM-DD'),\n                'tipo', e.tipo, 'salon', e.grupo_id::text,\n                'total_congelado', e.total_congelado,\n\n                -- rec y pers se arman desde GRUPOS con LEFT JOIN, no\n                -- desde evento_grupo: así TODO grupo del ciclo tiene su\n                -- llave aunque nunca se le haya capturado nada. Un\n                -- grupo faltante aquí es un NaN en el tablero.\n                'rec', (SELECT COALESCE(json_object_agg(g.id::text, COALESCE(eg.recaudado, 0)), '{}'::json)\n                          FROM grupos g\n                          LEFT JOIN evento_grupo eg ON eg.evento_id = e.id AND eg.grupo_id = g.id\n                         WHERE g.ciclo_id = $1::bigint),\n\n                'pers', (SELECT COALESCE(json_object_agg(g.id::text, json_build_object(\n                           'ad', COALESCE(eg.adultos, 0),\n                           'ni', COALESCE(eg.ninos, 0),\n                           'na', COALESCE(eg.ninas, 0))), '{}'::json)\n                           FROM grupos g\n                           LEFT JOIN evento_grupo eg ON eg.evento_id = e.id AND eg.grupo_id = g.id\n                          WHERE g.ciclo_id = $1::bigint),\n\n                'gastos', (SELECT COALESCE(json_agg(json_build_object(\n                             'id', x.id::text, 'f', to_char(x.fecha_pago, 'YYYY-MM-DD'),\n                             'd', x.descripcion, 'p', x.proveedor, 'm', x.monto,\n                             -- La FOTO no viaja aquí: solo que existe y\n                             -- quién la subió. La imagen se pide aparte,\n                             -- con URL firmada de 5 minutos.\n                             'ticket', CASE WHEN x.ticket_key IS NULL THEN NULL\n                                       ELSE json_build_object(\n                                         'src', NULL,\n                                         'nombre', x.ticket_nombre,\n                                         'por', x.ticket_por,\n                                         'cuando', x.ticket_en) END\n                           ) ORDER BY x.fecha_pago DESC, x.id DESC), '[]'::json)\n                           FROM gastos x WHERE x.evento_id = e.id)\n              ) ORDER BY e.fecha NULLS LAST, e.id), '[]'::json)\n                FROM eventos e\n                JOIN presupuestos pp ON pp.id = e.presupuesto_id\n               WHERE pp.ciclo_id = $1::bigint AND ${VISIBLE('e')})\n\n) AS datos`;\n\nreturn [{ json: {\n  ok: true,\n  sql: sql,\n  params: [\n    s.ciclo_id, s.rol, s.grupo_id, s.permisos.ver_todos_los_grupos === true,\n    JSON.stringify({\n      u: s.usuario, nom: s.nombre, rol: s.rol,\n      salon: s.grupo_id === null ? null : String(s.grupo_id),\n      tickets: s.permisos.tickets,\n      verPres: s.permisos.ver_presupuesto,\n      verTodos: s.permisos.ver_todos_los_grupos\n    })\n  ]\n} }];\n"
+      },
+      "id": "a1ebb111-2c3c-47c1-83bf-22a154a3f752",
+      "name": "Code - Armar consulta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {
+          "queryReplacement": "={{ $json.params }}",
+          "queryBatching": "single",
+          "largeNumbersOutput": "numbers"
+        }
+      },
+      "id": "d3eab281-75b3-447a-8376-7042ec21ca80",
+      "name": "Postgres - Ejecutar",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        800,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REEMPLAZAR_CRED_APP_RW",
+          "name": "tesoreria-db · app_rw"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "/* Nodo: \"Code - Responder\"  (los cinco workflows de API)\n\n   Convierte el resultado de Postgres en la respuesta del webhook.\n\n   Regla: los errores que salen hacia afuera son ETIQUETAS, no el texto\n   del error de Postgres. Un mensaje de la base cuenta nombres de tablas,\n   de columnas y de restricciones a quien no tiene por qué saberlos. El\n   detalle se queda en el historial de ejecuciones de n8n. */\n\nlet salida;\ntry {\n  const arm = $('Code - Armar consulta').first().json || {};\n\n  if (!arm.ok) {\n    salida = { ok: false, error: arm.error || 'NO_AUTORIZADO' };\n  } else {\n    const fila = $input.first().json || {};\n\n    // 'afectadas' la devuelven las mutaciones; 'datos' las lecturas.\n    if (Object.prototype.hasOwnProperty.call(fila, 'afectadas')) {\n      const n = Number(fila.afectadas || 0);\n      salida = n > 0\n        ? { ok: true, afectadas: n, id: fila.id === undefined ? null : String(fila.id) }\n        // Cero renglones tocados con sesión válida significa que el\n        // WHERE excluyó el renglón: o no existe, o no es suyo. A quien\n        // pregunta se le dice lo mismo en los dos casos, a propósito:\n        // distinguirlos le confirmaría que el renglón existe.\n        : { ok: false, error: 'NO_PERMITIDO_O_NO_EXISTE' };\n    } else {\n      salida = { ok: true, datos: fila.datos === undefined ? null : fila.datos };\n    }\n  }\n} catch (e) {\n  salida = { ok: false, error: 'RESPUESTA_FALLO' };\n}\nreturn [{ json: salida }];\n"
+      },
+      "id": "fd960f37-42cf-4ff0-845f-7e0346b21af7",
+      "name": "Code - Responder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "id": "5a1860fe-1d2b-4b91-837e-0d262cf42755",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1200,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code - Leer petición",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Leer petición": {
+      "main": [
+        [
+          {
+            "node": "Validar token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar token": {
+      "main": [
+        [
+          {
+            "node": "Code - Armar consulta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Armar consulta": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Ejecutar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Ejecutar": {
+      "main": [
+        [
+          {
+            "node": "Code - Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Responder": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Monterrey",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "meta": {
+    "descripcion": "Devuelve SOLO lo que ese token puede ver. El filtrado por grupo va en el WHERE del SQL, no recortando la respuesta. Una sola consulta, un solo renglon."
+  },
+  "pinData": {}
+}

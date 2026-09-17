@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tesorería Escolar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#EFF2F5;--card:#FFFFFF;--ink:#13202B;--muted:#5C6B78;--line:#DFE5EA;
+--a:#4C6EF5;--b:#E09B2D;--c:#CE4C7C;--pos:#12806A;--neg:#B8402F;--shade:#13202B;--radius:14px}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#0E161D;--card:#17222C;--ink:#E9EFF3;--muted:#93A3AF;--line:#26333F;--a:#7B94F8;--b:#EFB255;--c:#E6789F;--pos:#38B996;--neg:#E0705C;--shade:#C6D2DB}}
+*{box-sizing:border-box}html,body{margin:0;padding:0}
+[hidden]{display:none!important}
+body{background:var(--paper);color:var(--ink);font-family:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3,.num{font-family:"Familjen Grotesk","Public Sans",sans-serif;font-variant-numeric:tabular-nums}
+.wrap{max-width:760px;margin:0 auto;padding:18px 14px 56px}
+button:focus-visible,select:focus-visible,input:focus-visible,.pcard:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+#login{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px}
+#login .box{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px 22px;width:100%;max-width:380px}
+#login h1{font-size:25px;margin:0;letter-spacing:-0.02em}
+#login .sub{color:var(--muted);font-size:13.5px;margin:4px 0 20px}
+.inp{margin-bottom:12px}
+.inp label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:5px}
+.inp input,.inp select{width:100%;font:inherit;font-size:15px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink)}
+.err{color:var(--neg);font-size:13px;margin:4px 0 8px}
+.pw{position:relative}.pw input{padding-right:46px}
+.eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--muted);cursor:pointer;padding:9px;display:flex;border-radius:8px}
+.eye svg{width:19px;height:19px;display:block}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:14px}
+header h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-0.015em}
+.sub{color:var(--muted);font-size:13px;margin-top:2px}
+.who-btn{flex:0 0 auto;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:13px;padding:7px 12px;border-radius:999px;cursor:pointer}
+.tabs{display:flex;gap:6px;margin:0 0 12px;background:var(--card);padding:4px;border-radius:11px;border:1px solid var(--line)}
+.tabs button{flex:1;border:0;background:transparent;color:var(--muted);font:inherit;font-weight:500;padding:8px 6px;border-radius:8px;cursor:pointer;font-size:13.5px}
+.tabs button[aria-selected="true"]{background:var(--shade);color:var(--card)}
+.chips{display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px}
+.chip{white-space:nowrap;border:1px solid var(--line);background:var(--card);color:var(--muted);font:inherit;font-size:13.5px;padding:7px 13px;border-radius:999px;cursor:pointer;flex:0 0 auto}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink);font-weight:500}
+.filtro{display:flex;gap:8px;align-items:center;margin-bottom:14px}
+.filtro select{flex:1;font:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.hero .label{color:var(--muted);font-size:13px}
+.hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.hero .big{font-size:40px;font-weight:600;line-height:1.05;margin:4px 0 2px;letter-spacing:-0.03em}
+.hero .big.neg{color:var(--neg)}
+.hero .note{font-size:13px;color:var(--muted)}
+.bar{height:11px;border-radius:6px;background:var(--line);overflow:hidden;display:flex;margin-top:14px}
+.bar i{display:block;height:100%}.bar .spent{background:var(--shade)}.bar .left{background:var(--pos)}
+.legend{display:flex;gap:16px;margin-top:9px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:3px;display:inline-block}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:13px 14px}
+.stat .k{font-size:12.5px;color:var(--muted);line-height:1.3}
+.stat .v{font-size:22px;font-weight:600;margin-top:5px;letter-spacing:-0.02em}
+.stat .brk{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.35;font-weight:400}
+.stat.link{cursor:pointer}
+.stat.link:hover{border-color:var(--muted)}
+.stat .go{font-size:11.5px;color:var(--a);font-weight:600;margin-top:6px}
+h2{font-size:14px;font-weight:600;margin:20px 0 9px;color:var(--muted)}
+.salon{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line)}
+.salon:last-child{border-bottom:0}
+.salon .tag{width:44px;font-weight:600;font-size:13.5px;flex:0 0 auto;font-family:"Familjen Grotesk",sans-serif}
+.salon .who{font-size:11.5px;color:var(--muted);margin-top:2px;font-family:"Public Sans",sans-serif;font-weight:400}
+.salon .track{flex:1;height:7px;background:var(--line);border-radius:4px;overflow:hidden}
+.salon .track i{display:block;height:100%;border-radius:4px}
+.salon .amt{font-weight:600;font-size:14.5px;min-width:80px;text-align:right;font-variant-numeric:tabular-nums}
+.salon .amt small{display:block;font-weight:400;font-size:11px;color:var(--muted);white-space:nowrap}
+.salon input{font:inherit;font-size:14px;font-weight:600;text-align:right;width:90px;border:0;border-bottom:1px dashed var(--line);background:transparent;color:var(--ink);padding:3px 2px;font-variant-numeric:tabular-nums}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-weight:500;color:var(--muted);font-size:12px;padding:0 0 8px;border-bottom:1px solid var(--line)}
+td{padding:11px 0;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.money,th.money{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.desc{font-weight:500}.meta{color:var(--muted);font-size:12px;margin-top:2px}
+.tick{border:0;background:transparent;color:var(--a);font:inherit;font-size:12px;font-weight:600;padding:4px 0 0;cursor:pointer}
+.tick.falta{color:var(--neg)}
+.tfoot{display:flex;justify-content:space-between;align-items:baseline;padding-top:13px;margin-top:3px;border-top:2px solid var(--ink)}
+.tfoot .v{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums}
+.empty{color:var(--muted);font-size:13.5px;padding:18px 0;text-align:center}
+.field{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.field:last-of-type{border-bottom:0}
+.field label{font-size:13.5px;color:var(--muted)}
+.field input,.field select{font:inherit;font-size:14px;text-align:right;border:0;background:transparent;color:var(--ink);border-bottom:1px dashed var(--line);padding:3px 2px;max-width:180px;width:100%;font-variant-numeric:tabular-nums}
+.field select{text-align-last:right}
+.field input:disabled,.field select:disabled{border-bottom-color:transparent;color:var(--muted);opacity:1}
+.conc{display:grid;grid-template-columns:1fr 54px 78px 26px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.conc input{font:inherit;font-size:13.5px;border:0;background:transparent;color:var(--ink);border-bottom:1px dashed var(--line);padding:4px 2px;width:100%}
+.conc input.n{text-align:right;font-variant-numeric:tabular-nums}
+.conc input:disabled{border-bottom-color:transparent;color:var(--muted);opacity:1}
+.conc .head{color:var(--muted);font-size:11.5px}
+.conc .del{border:0;background:transparent;color:var(--muted);font-size:17px;cursor:pointer;padding:0;line-height:1}
+.addrow{margin-top:10px;border:1px dashed var(--line);background:transparent;color:var(--muted);font:inherit;font-size:13px;padding:9px;width:100%;border-radius:9px;cursor:pointer}
+.result{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;padding:12px 0 0;border-top:2px solid var(--ink)}
+.result .v{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:4px 10px;border-radius:999px;white-space:nowrap}
+.badge.open{background:color-mix(in srgb,var(--b) 18%,transparent);color:var(--b)}
+.badge.closed{background:color-mix(in srgb,var(--pos) 16%,transparent);color:var(--pos)}
+.badge.none{background:var(--line);color:var(--muted)}
+.badge.tipo{background:var(--line);color:var(--muted);font-weight:500}
+.badge.solo{background:color-mix(in srgb,var(--c) 15%,transparent);color:var(--c);font-weight:500}
+.actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.btn{flex:1;min-width:140px;border:0;background:var(--shade);color:var(--card);font:inherit;font-weight:600;font-size:14px;padding:12px;border-radius:10px;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:500}
+.btn.danger{background:var(--neg);color:#fff}
+.btn.wide{width:100%}
+.hint{font-size:12.5px;color:var(--muted);margin-top:12px}
+.lockmsg{background:color-mix(in srgb,var(--b) 12%,transparent);border-radius:10px;padding:11px 13px;font-size:13px;margin-top:12px}
+.lend{background:color-mix(in srgb,var(--a) 11%,transparent);border-radius:10px;padding:11px 13px;font-size:13px;margin-bottom:12px;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.lend button{border:0;background:transparent;color:var(--a);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:0;white-space:nowrap}
+.pcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;cursor:pointer}
+.pcard:hover{border-color:var(--muted)}
+.pcard-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.pcard-nom{font-family:"Familjen Grotesk",sans-serif;font-weight:600;font-size:16px;letter-spacing:-0.01em}
+.pcard-bot{display:flex;justify-content:space-between;align-items:baseline;margin-top:10px;font-size:13px;color:var(--muted)}
+.pcard-ok{margin-top:10px;padding-top:9px;border-top:1px solid var(--line);font-size:12.5px;color:var(--pos)}
+.pcard-lend{margin-top:10px;padding-top:9px;border-top:1px solid var(--line);font-size:12.5px;color:var(--a)}
+.volver{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--card);
+  color:var(--ink);font:inherit;font-size:13.5px;font-weight:500;padding:9px 15px 9px 12px;border-radius:999px;
+  cursor:pointer;margin-bottom:14px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.volver:hover{border-color:var(--muted)}
+.volver svg{width:16px;height:16px;flex:0 0 auto}
+.toast{position:fixed;left:14px;right:14px;bottom:16px;max-width:520px;margin:0 auto;background:var(--shade);color:var(--card);padding:13px 16px;border-radius:11px;font-size:13.5px;box-shadow:0 8px 28px rgba(0,0,0,.22);z-index:90}
+.modal{position:fixed;inset:0;background:rgba(6,14,20,.6);display:flex;align-items:center;justify-content:center;z-index:80;padding:18px;overflow-y:auto}
+.modal .box{background:var(--card);border-radius:16px;padding:20px;width:100%;max-width:400px;box-shadow:0 14px 44px rgba(0,0,0,.3);margin:auto}
+.modal h3{margin:0 0 6px;font-size:18px;font-weight:600;letter-spacing:-0.01em}
+.modal p{margin:0 0 4px;font-size:14px;color:var(--muted);line-height:1.45}
+.ticket-img{width:100%;border-radius:11px;border:1px solid var(--line);margin:14px 0 4px;display:block}
+.dropzone{border:1px dashed var(--line);border-radius:11px;padding:26px 14px;text-align:center;color:var(--muted);font-size:13.5px;margin:14px 0 4px}
+footer{color:var(--muted);font-size:12px;text-align:center;margin-top:26px;line-height:1.6}
+.ver{position:fixed;right:10px;bottom:10px;z-index:40;font-family:"Familjen Grotesk",sans-serif;
+  font-size:10.5px;font-weight:600;letter-spacing:.02em;color:var(--muted);background:var(--card);
+  border:1px solid var(--line);border-radius:999px;padding:3px 9px;opacity:.75;pointer-events:none}
+.copy{border:0;background:transparent;color:var(--muted);font:inherit;font-size:11.5px;line-height:1.5;
+  text-align:center;cursor:pointer;padding:10px 0 0;text-decoration:underline;text-underline-offset:3px;
+  text-decoration-color:var(--line);display:block;width:100%}
+.copy:hover{color:var(--ink)}
+.legal{max-height:62vh;overflow-y:auto;margin:14px 0 4px;padding-right:4px}
+.legal h4{font-family:"Familjen Grotesk",sans-serif;font-size:13.5px;font-weight:600;margin:16px 0 5px;color:var(--ink)}
+.legal h4:first-child{margin-top:0}
+.legal p{font-size:12.5px;line-height:1.55;margin:0 0 8px;color:var(--muted)}
+.modal .box.ancho{max-width:520px}
+@media (max-width:420px){.hero .big{font-size:34px}}
+@media (prefers-reduced-motion:no-preference){.bar i,.salon .track i{transition:width .35s ease}}
+</style>
+</head>
+<body>
+
+<div class="ver" id="ver" aria-hidden="true"></div>
+
+<div id="login">
+  <div class="box">
+    <h1>Tesorería Escolar</h1>
+    <p class="sub">Eventos de generación y del salón</p>
+    <div class="inp"><label for="lu">Usuario</label><input id="lu" autocomplete="username" autocapitalize="characters"></div>
+    <div class="inp"><label for="lp">Contraseña</label>
+      <div class="pw"><input id="lp" type="password" autocomplete="current-password">
+        <button class="eye" id="eye" type="button" onclick="verPass()" aria-label="Mostrar contraseña" aria-pressed="false"></button></div></div>
+    <div class="err" id="lerr" hidden></div>
+    <button class="btn wide" onclick="entrar()">Entrar</button>
+    <button class="copy" onclick="avisoLegal()">© 2026 Servicios FTS S.A. de C.V. y FTS Full Technology Systems LLC.<br>Todos los derechos reservados.</button>
+  </div>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <header>
+    <div><h1 id="hTit">Tesorería</h1><div class="sub" id="whoSub"></div></div>
+    <button class="who-btn" onclick="salir()">Salir</button>
+  </header>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <section id="view"></section>
+  <footer>
+    <button class="copy" onclick="miPassword()">Cambiar mi contraseña</button><br>
+    <button class="copy" onclick="avisoLegal()">© 2026 Servicios FTS S.A. de C.V. y FTS Full Technology Systems LLC.<br>Todos los derechos reservados.</button>
+  </footer>
+</div>
+
+<script>
+const VERSION='V1.10';
+
+/* =========================================================
+   CAPA API — habla con n8n. Cada función es un fetch al
+   webhook, y el webhook es quien valida: aquí no se decide
+   ningún permiso, solo se pinta.
+
+   DB dejó de ser la base de datos y es la CACHÉ en memoria
+   de lo que el servidor dejó ver. Se llena de un golpe con
+   api.cargar() y se refresca después de cada cambio. Por eso
+   las vistas no cambiaron ni una línea: siguen leyendo DB.
+   ========================================================= */
+
+const API='https://primary-production-5c3c.up.railway.app/webhook/tes';
+const LLAVE_SESION='tes_sesion';
+
+const DB={ciclo:null,ciclos:[],usuarios:[],presupuestos:[],eventos:[]};
+let TOKEN=null;
+
+/* Una sola puerta para TODAS las respuestas. Clasificar aquí y no en
+   cada llamador es lo que permite que una llave de sesión muerta no se
+   confunda con "no hay internet": son cosas distintas y llevan a
+   acciones distintas —volver a entrar, o esperar—, y juntarlas elige
+   la peor de las dos por omisión. */
+async function pide(ruta,accion,datos){
+  let r;
+  try{
+    r=await fetch(API+'/'+ruta,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({token:TOKEN,accion,datos:datos||{}})});
+  }catch(e){
+    const err=new Error('No se pudo conectar. Revisa tu internet y vuelve a intentar.');
+    err.clase='red';throw err;
+  }
+  let j=null;
+  try{ j=await r.json(); }catch(e){ j=null; }
+
+  if(!r.ok&&!j){
+    const err=new Error('El servidor no contestó bien. Vuelve a intentar en un momento.');
+    err.clase='servidor';throw err;
+  }
+  if(j&&j.ok)return j;
+
+  const cod=(j&&j.error)||'ERROR';
+  /* Sesión muerta: se borra SOLO la llave de sesión y se manda a
+     entrar otra vez. Reintentar con un token vencido no arregla nada,
+     y pedirle a alguien que abra la consola del navegador tampoco. */
+  if(/^TOKEN_|^PERSONA_NO_EXISTE$|^SIN_MEMBRESIA|^CUENTA_DESACTIVADA$|^SIN_CICLO_ACTIVO$/.test(cod)){
+    try{ localStorage.removeItem(LLAVE_SESION); }catch(e){}
+    TOKEN=null;
+    const err=new Error(MENSAJES[cod]||'Tu sesión terminó. Vuelve a entrar.');
+    err.clase='sesion';throw err;
+  }
+  const err=new Error((j&&j.mensaje)||MENSAJES[cod]||'No se pudo guardar el cambio.');
+  err.clase='servidor';throw err;
+}
+
+const MENSAJES={
+  TOKEN_VENCIDO:'Tu sesión venció. Vuelve a entrar.',
+  TOKEN_FIRMA_INVALIDA:'Tu sesión ya no es válida. Vuelve a entrar.',
+  TOKEN_MAL_FORMADO:'Tu sesión ya no es válida. Vuelve a entrar.',
+  TOKEN_ILEGIBLE:'Tu sesión ya no es válida. Vuelve a entrar.',
+  TOKEN_ALG_INVALIDO:'Tu sesión ya no es válida. Vuelve a entrar.',
+  TOKEN_NO_CORRESPONDE:'Tu sesión ya no es válida. Vuelve a entrar.',
+  PERSONA_NO_EXISTE:'Tu cuenta ya no existe. Habla con la tesorera.',
+  SIN_MEMBRESIA_EN_CICLO:'Tu cuenta no está dada de alta en el ciclo actual.',
+  CUENTA_DESACTIVADA:'Esta cuenta está desactivada. Habla con la tesorera.',
+  SIN_CICLO_ACTIVO:'Todavía no hay un ciclo escolar activo.',
+  NO_PERMITIDO_O_NO_EXISTE:'No puedes cambiar eso, o ya no existe. Recarga la página.',
+  ROL_SIN_PERMISO:'Tu cuenta no puede hacer eso.',
+  SOLO_ADMIN:'Solo la tesorera general puede hacer eso.',
+  SIN_PERMISO_TICKETS:'Tu cuenta no puede cargar tickets.',
+  DEMASIADOS_INTENTOS:'Demasiados intentos. Espera un minuto.'
+};
+
+/* Los campos de texto mandan con oninput, o sea en cada tecla. Sin
+   esto, escribir un nombre serían quince peticiones. Se juntan por
+   (id + campo) para que dos campos distintos no se pisen. */
+const _timers={};
+function tarde(llave,ms,fn){
+  clearTimeout(_timers[llave]);
+  return new Promise(res=>{_timers[llave]=setTimeout(()=>res(fn()),ms)});
+}
+
+/* Vuelve a traer todo del servidor y repinta. Después de cada cambio,
+   para que lo que se ve sea lo que quedó guardado y no lo que el
+   navegador cree. */
+async function refresca(){ await api.cargar(); }
+
+const api={
+
+  async login(u,p){
+    const j=await pide('auth','login',{usuario:u,clave:p});
+    TOKEN=j.token;
+    try{ localStorage.setItem(LLAVE_SESION,j.token); }catch(e){}
+    await api.cargar();
+    return j.sesion;
+  },
+
+  async cambiarPassword(actual,nueva){
+    return (await pide('auth','password',{actual,nueva})).mensaje||'Contraseña actualizada.';
+  },
+
+  /* La lectura. Trae SOLO lo que este token puede ver —el filtrado va
+     en el WHERE del servidor— y llena la caché. SALONES también sale de
+     aquí: número de grupos, nombres y colores vienen de la base. */
+  async cargar(){
+    const j=await pide('lectura','todo',{});
+    const d=j.datos||{};
+    if(d.sesion)ses=d.sesion;
+    DB.ciclo=d.ciclo||null;
+    DB.ciclos=d.ciclos||[];
+    DB.usuarios=d.usuarios||[];
+    DB.presupuestos=d.presupuestos||[];
+    DB.eventos=d.eventos||[];
+    SALONES=(d.grupos||[]).map(g=>({id:g.id,nom:g.nom,color:g.color,letra:g.letra,reps:''}));
+    return d;
+  },
+
+  async crearPres(nom,fecha,salon,tipo){
+    const j=await pide('presupuestos','crear',{nombre:nom,fecha,grupo_id:salon,tipo});
+    await refresca();
+    return j.id;
+  },
+
+  /* Mismo contrato que el prototipo: un parche. Los nombres de campo
+     del navegador se traducen aquí a los de la base, para que las
+     vistas no tuvieran que cambiar. */
+  async setPres(id,patch){
+    const P=pres(id); if(P)Object.assign(P,patch);      // se pinta de inmediato
+    const m={nom:'nombre',fecha:'fecha',rep:'responsable',ninos:'ninos',ninas:'ninas',
+             adultos:'adultos',banco:'banco',clabe:'clabe',titular:'titular'};
+    const d={id};
+    for(const k in patch) if(m[k]!==undefined) d[m[k]]=patch[k];
+    return tarde('pres'+id+Object.keys(patch).join(),500,async()=>{
+      await pide('presupuestos','editar',d);
+      await refresca();
+    });
+  },
+
+  /* Los tres de conceptos mandan el ARREGLO COMPLETO, no un parche por
+     índice: el índice no sobrevive a dos personas editando el mismo
+     presupuesto, y el arreglo entero es una sola escritura. */
+  async addConcepto(id){ pres(id).c.push({d:'',q:1,u:0}); return guardaConceptos(id,0); },
+  async setConcepto(id,i,k,v){ pres(id).c[i][k]=v; return guardaConceptos(id,500); },
+  async delConcepto(id,i){ pres(id).c.splice(i,1); return guardaConceptos(id,0); },
+
+  async delPres(id){ await pide('presupuestos','eliminar',{id}); await refresca(); },
+  async confirmar(id){ await pide('presupuestos','confirmar',{id}); await refresca(); },
+  async devolver(id){ await pide('presupuestos','devolver',{id}); await refresca(); },
+  async prestar(id,salon,dias){ await pide('presupuestos','prestar',{id,grupo_id:salon,dias}); await refresca(); },
+  async quitarPrestamo(id){ await pide('presupuestos','quitar_prestamo',{id}); await refresca(); },
+
+  async setRecaudado(e,s,v){
+    ev(e).rec[s]=v;
+    return tarde('rec'+e+s,500,async()=>{
+      await pide('tesoreria','recaudacion',{evento_id:e,grupo_id:s,recaudado:v});
+      await refresca();
+    });
+  },
+
+  async setPersonas(e,s,patch){
+    Object.assign(ev(e).pers[s]||(ev(e).pers[s]=vacioPers()),patch);
+    const o=ev(e).pers[s];
+    await pide('tesoreria','personas',{evento_id:e,grupo_id:s,adultos:o.ad,ninos:o.ni,ninas:o.na});
+    await refresca();
+  },
+
+  async addGasto(e,g){
+    await pide('tesoreria','gasto_crear',
+      {evento_id:e,fecha:g.f,descripcion:g.d,proveedor:g.p,monto:g.m});
+    await refresca();
+  },
+  async delGasto(e,id){ await pide('tesoreria','gasto_eliminar',{evento_id:e,gasto_id:id}); await refresca(); },
+  async delEvento(id){ await pide('tesoreria','evento_eliminar',{evento_id:id}); await refresca(); },
+
+  /* TICKETS. La foto NUNCA pasa por n8n ni por la base:
+       1. se pide al servidor una URL firmada de subida
+       2. el celular sube el archivo DIRECTO al bucket
+       3. se guarda nada más la llave
+     Si el paso 2 falla, no se guarda la llave: no queda un ticket que
+     se ve en pantalla y no se puede abrir. */
+  async subirTicket(e,gid,archivo){
+    const f=await pide('tesoreria','ticket_subir_url',
+      {evento_id:e,gasto_id:gid,nombre:archivo.name});
+    let r;
+    try{
+      r=await fetch(f.url,{method:'PUT',body:archivo,
+        headers:{'Content-Type':archivo.type||'application/octet-stream'}});
+    }catch(err){ const x=new Error('No se pudo subir la foto. Revisa tu internet.');x.clase='red';throw x; }
+    if(!r.ok){ const x=new Error('El archivo no se pudo guardar. Vuelve a intentar.');x.clase='servidor';throw x; }
+    await pide('tesoreria','ticket_fijar',
+      {evento_id:e,gasto_id:gid,ticket_key:f.ticket_key,nombre:archivo.name});
+    await refresca();
+  },
+  async quitarTicket(e,gid){
+    await pide('tesoreria','ticket_fijar',{evento_id:e,gasto_id:gid,ticket_key:null});
+    await refresca();
+  },
+  /* URL de lectura, viva 5 minutos. Se pide al abrir el ticket, no al
+     cargar la pantalla: si viniera en la lectura general, cada carga
+     firmaría URLs de todas las fotos y la mayoría no se abre nunca. */
+  async verTicketUrl(e,gid){
+    return (await pide('tesoreria','ticket_ver_url',{evento_id:e,gasto_id:gid})).url;
+  },
+
+  /* ---- administración ---- */
+  async setUsuario(personaId,patch){ await pide('admin','membresia_editar',
+      Object.assign({persona_id:personaId},patch)); await refresca(); },
+
+  /* Al dar de alta o poner una contraseña nueva, el revuelto se calcula
+     AQUÍ, en el navegador: la contraseña en claro nunca sale de este
+     equipo, ni siquiera hacia nuestro propio servidor. (En el login sí
+     viaja, porque es el servidor quien tiene que comparar.) */
+  async crearPersona(d){
+    const hash=await revuelve(d.clave);
+    await pide('admin','persona_crear',{nombre:d.nombre,usuario:d.usuario,hash:hash,
+      rol:d.rol,grupo_id:d.grupo_id,permisos:d.permisos});
+    await refresca();
+  },
+  async ponerClave(personaId,clave){
+    await pide('admin','persona_clave',{persona_id:personaId,hash:await revuelve(clave)});
+    await refresca();
+  },
+  async setGrupo(accion,d){ await pide('admin','grupo_'+accion,d); await refresca(); },
+  async crearCiclo(d){ await pide('admin','ciclo_crear',d); await refresca(); },
+  async activarCiclo(id){ await pide('admin','ciclo_activar',{ciclo_id:id}); await refresca(); },
+  async pasarDeAno(d){ const j=await pide('admin','pasar_de_ano',d); await refresca(); return j; }
+};
+
+/* PBKDF2-SHA256, 100 000 vueltas, con sal nueva cada vez. Mismo formato
+   que usa el servidor: pbkdf2$<vueltas>$<sal>$<derivado>, todo en
+   base64url. Lo hace WebCrypto, que ya trae el navegador. */
+async function revuelve(clave){
+  const sal=crypto.getRandomValues(new Uint8Array(16));
+  const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(clave),'PBKDF2',false,['deriveBits']);
+  const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:sal,iterations:100000,hash:'SHA-256'},k,256);
+  return 'pbkdf2$100000$'+b64u(sal)+'$'+b64u(new Uint8Array(bits));
+}
+function b64u(bytes){
+  let s='';for(const b of bytes)s+=String.fromCharCode(b);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+function guardaConceptos(id,ms){
+  const P=pres(id);
+  return tarde('conc'+id,ms,async()=>{
+    await pide('presupuestos','editar',{id,conceptos:P.c});
+    await refresca();
+  });
+}
+function vacioPers(){return {ad:0,ni:0,na:0}}
+const pres=id=>DB.presupuestos.find(p=>p.id===id);
+const ev=id=>DB.eventos.find(e=>e.id===id);
+const presDeEvento=e=>pres(e.presId);
+const eventoDe=id=>DB.eventos.find(e=>e.presId===id);
+
+/* ================= helpers ================= */
+const mx=n=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0}).format(n);
+const fch=s=>new Date(s+'T12:00:00').toLocaleDateString('es-MX',{day:'numeric',month:'short'});
+const fchHora=ts=>new Date(ts).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
+const esc=s=>String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+/* Los salones ya NO viven aquí: los llena api.cargar() con los grupos
+   del ciclo activo, con su nombre y su color. Pueden ser 3, 4 o los que
+   haya. El resto del código ya usaba esta constante, así que ninguna
+   vista cambió por esto. */
+let SALONES=[];
+const nomSalon=id=>SALONES.find(s=>s.id===id)?.nom||'';
+const totPres=P=>P.c.reduce((s,k)=>s+(k.q||0)*(k.u||0),0);
+const chamacos=P=>(P.ninos||0)+(P.ninas||0);
+const totPersonas=P=>chamacos(P)+(P.adultos||0);
+const sumaPers=o=>(o?.ad||0)+(o?.ni||0)+(o?.na||0);
+/* El servidor YA resolvió si el préstamo sigue vivo, contra SU reloj:
+   si viene el objeto, está vigente; si venció, viene en nulo. Aquí no
+   se vuelve a comparar fechas a propósito — la versión vieja hacía
+   `Date.now() < P.prestamo.hasta`, y eso se podía burlar atrasando el
+   reloj del celular. (Además comparaba un número contra el texto ISO
+   del servidor, que da NaN y deja el préstamo invisible siempre.) */
+const prestamoVivo=P=>!!P.prestamo;
+const etiqueta=P=>P.estado==='confirmado'?'Confirmado':(totPres(P)>0||P.rep?'En creación':'Sin empezar');
+let volverA='pre';
+
+/* quién ve qué */
+const veEvento=e=>ses.rol==='admin'||e.tipo==='generacion'||e.salon===ses.salon;
+const vePres=P=>ses.rol==='admin'||P.tipo==='generacion'||P.salon===ses.salon;
+const eventosVisibles=()=>DB.eventos.filter(veEvento);
+/* quién es tesorera de un evento */
+const esTesorera=e=>ses.rol==='admin'||(e.tipo==='salon'&&ses.rol==='rep'&&ses.salon===e.salon);
+const puedeTicket=e=>esTesorera(e)&&ses.tickets;
+const salonesDe=e=>e.tipo==='salon'?SALONES.filter(s=>s.id===e.salon):SALONES;
+function puedeEditarPres(P){
+  if(!ses)return false;
+  if(ses.rol==='admin')return true;
+  if(ses.rol!=='rep')return false;
+  if(P.estado==='confirmado')return false;
+  if(P.salon===ses.salon)return true;
+  return prestamoVivo(P)&&P.prestamo.a===ses.salon;
+}
+const puedeConfirmar=P=>ses.rol==='admin'||(P.tipo==='salon'&&ses.rol==='rep'&&P.salon===ses.salon);
+const puedeVerPres=()=>ses.rol==='admin'||!!ses.verPres;
+const puedeVerTodos=()=>ses.rol==='admin'||!!ses.verTodos;
+
+let ses=null,tab='tes',selE='todos',preId=null,preView='lista',fSalon='todos',fEstado='todos',fTipo='todos',fAlc='auto',toastT=null;
+
+function avisoLegal(){
+  modal(`<h3>Aviso legal y de privacidad</h3>
+  <p>Servicios FTS S.A. de C.V. y FTS Full Technology Systems LLC</p>
+  <div class="legal">
+    <h4>1. Propiedad intelectual y uso autorizado</h4>
+    <p>© 2026 Servicios FTS S.A. de C.V. y FTS Full Technology Systems LLC. Todos los derechos reservados. Esta aplicación y su contenido, incluyendo de manera enunciativa mas no limitativa el código fuente, el diseño de la interfaz, la estructura de la base de datos, la lógica de permisos y niveles de acceso, los flujos de automatización, los formatos de presupuesto y las representaciones gráficas, son propiedad intelectual exclusiva de los titulares y se habilitan únicamente para la administración de la tesorería de los eventos escolares del grupo autorizado. Queda prohibida su reproducción, redistribución, modificación o divulgación a terceros sin consentimiento previo por escrito, conforme a la Ley Federal del Derecho de Autor (México) y a la ley de derechos de autor de los Estados Unidos (17 U.S.C. § 101 et seq.).</p>
+    <h4>2. Acceso y credenciales</h4>
+    <p>El acceso se otorga mediante credenciales personales e intransferibles. Quien recibe una credencial es responsable de su resguardo y de todo acto realizado con ella. Compartir credenciales, intentar acceder a información de un grupo distinto al asignado o alterar los mecanismos de control constituye uso no autorizado y da lugar a la cancelación inmediata del acceso.</p>
+    <h4>3. Confidencialidad</h4>
+    <p>La información contenida aquí, incluyendo montos, presupuestos, comprobantes, datos bancarios y conteos de participantes, es confidencial. Las personas autorizadas se obligan a no divulgarla a terceros ajenos al grupo escolar correspondiente ni a usarla para fines distintos de los aquí previstos.</p>
+    <h4>4. Datos personales</h4>
+    <p>El tratamiento de datos personales se realiza conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares. Se recaban únicamente los datos necesarios para la operación: nombre de las personas representantes, grupo al que pertenecen, datos de la cuenta bancaria del evento, montos, gastos y comprobantes de pago.</p>
+    <p>No se recaban ni almacenan nombres, fotografías ni datos de identificación de menores de edad. Los conteos de asistencia se registran de forma agregada y numérica, sin individualizar a persona alguna. Los datos no se transfieren ni comercializan con terceros. Los derechos de acceso, rectificación, cancelación y oposición se ejercen ante la persona que administra la tesorería, quien canaliza la solicitud a los titulares.</p>
+    <h4>5. Naturaleza de la información</h4>
+    <p>Esta herramienta es un registro administrativo de apoyo. No constituye contabilidad formal, no genera comprobantes fiscales y no sustituye los registros que en su caso corresponda llevar conforme a la legislación aplicable. Las cifras mostradas dependen de la información capturada por las personas usuarias y su exactitud es responsabilidad de quien las captura.</p>
+    <h4>6. Limitación de responsabilidad</h4>
+    <p>La aplicación se proporciona en el estado en que se encuentra. Los titulares no garantizan disponibilidad ininterrumpida ni ausencia total de errores, y no serán responsables por daños directos o indirectos derivados de su uso, de la pérdida de información, de la interrupción del servicio, ni de las decisiones tomadas con base en la información aquí registrada.</p>
+    <h4>7. Legislación y jurisdicción</h4>
+    <p>Este aviso se rige por las leyes de los Estados Unidos Mexicanos. Para su interpretación y cumplimiento, las partes se someten a los tribunales competentes de Monterrey, Nuevo León, renunciando a cualquier otro fuero que pudiera corresponderles.</p>
+    <p>Versión 1.0, vigente a partir de septiembre de 2026.</p>
+  </div>
+  <div class="actions"><button class="btn" data-ok>Cerrar</button></div>`,
+  (m,cierra)=>{m.querySelector('.box').classList.add('ancho');m.querySelector('[data-ok]').onclick=cierra;m.querySelector('[data-ok]').focus()});
+}
+
+function toast(m){document.querySelectorAll('.toast').forEach(t=>t.remove());
+  const t=document.createElement('div');t.className='toast';t.textContent=m;t.setAttribute('role','status');
+  document.body.appendChild(t);clearTimeout(toastT);toastT=setTimeout(()=>t.remove(),4000)}
+function modal(html,setup){
+  const m=document.createElement('div');m.className='modal';
+  m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');
+  m.innerHTML=`<div class="box">${html}</div>`;
+  const cierra=()=>{m.remove();document.removeEventListener('keydown',tecla)};
+  const tecla=e=>{if(e.key==='Escape')cierra()};
+  m.addEventListener('click',e=>{if(e.target===m)cierra()});
+  document.addEventListener('keydown',tecla);
+  document.body.appendChild(m);setup(m,cierra);return m;
+}
+function confirmar(titulo,texto,accion='Eliminar'){
+  return new Promise(res=>{
+    modal(`<h3>${esc(titulo)}</h3><p>${esc(texto)}</p>
+      <div class="actions"><button class="btn ghost" data-no>Cancelar</button>
+      <button class="btn danger" data-si>${esc(accion)}</button></div>`,
+    (m,c)=>{m.querySelector('[data-no]').onclick=()=>{c();res(false)};
+            m.querySelector('[data-si]').onclick=()=>{c();res(true)};
+            m.querySelector('[data-no]').focus()});
+  });
+}
+
+/* ================= sesión ================= */
+const OJO_ON=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const OJO_OFF=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><line x1="3" y1="21" x2="21" y2="3"/></svg>`;
+function verPass(){const i=document.getElementById('lp'),b=document.getElementById('eye');
+  const v=i.type==='password';i.type=v?'text':'password';b.innerHTML=v?OJO_OFF:OJO_ON;
+  b.setAttribute('aria-pressed',v);b.setAttribute('aria-label',v?'Ocultar contraseña':'Mostrar contraseña');i.focus()}
+document.getElementById('eye').innerHTML=OJO_ON;
+document.getElementById('ver').textContent=VERSION;
+document.getElementById('lp').addEventListener('keydown',e=>{if(e.key==='Enter')entrar()});
+
+/* Un fallo de sesión devuelve a la pantalla de entrar. Se llama desde
+   cada catch: la clasificación ya la hizo pide(), aquí solo se actúa. */
+function falloSesion(err){
+  if(err&&err.clase==='sesion'){
+    const e=document.getElementById('lerr');
+    salir();e.textContent=err.message;e.hidden=false;
+  }
+}
+
+async function entrar(){
+  const e=document.getElementById('lerr');
+  const b=document.querySelector('#login .btn.wide');
+  e.hidden=true;b.disabled=true;b.textContent='Entrando…';
+  try{ses=await api.login(document.getElementById('lu').value,document.getElementById('lp').value)}
+  catch(err){e.textContent=err.message;e.hidden=false;b.disabled=false;b.textContent='Entrar';return}
+  finally{if(b.disabled){b.disabled=false;b.textContent='Entrar'}}
+  preView='lista';fSalon='todos';fEstado='todos';fTipo='todos';fAlc='auto';selE='todos';tab='tes';
+  try{
+    document.getElementById('login').hidden=true;
+    document.getElementById('app').hidden=false;
+    document.getElementById('whoSub').textContent=ses.nom;
+    pintaTabs();draw();window.scrollTo(0,0);
+  }catch(err){e.textContent='Algo falló al abrir el tablero: '+err.message;e.hidden=false;
+    document.getElementById('login').hidden=false;document.getElementById('app').hidden=true}
+}
+function salir(){
+  ses=null;tab='tes';TOKEN=null;
+  /* Se borra la LLAVE DE SESIÓN y solo ésa. Lo demás que guarde el
+     navegador no es asunto de salir. */
+  try{ localStorage.removeItem(LLAVE_SESION); }catch(e){}
+  DB.ciclo=null;DB.ciclos=[];DB.usuarios=[];DB.presupuestos=[];DB.eventos=[];SALONES=[];
+  document.getElementById('app').hidden=true;document.getElementById('login').hidden=false;
+  document.getElementById('lp').value='';document.getElementById('lerr').hidden=true}
+
+/* Si hay token guardado, se entra sin volver a teclear la contraseña.
+   El token vive 8 horas y lo valida el servidor: si ya no sirve, pide()
+   lo clasifica como 'sesion', se borra la llave y aparece el login. */
+(async function restaura(){
+  let t=null;
+  try{ t=localStorage.getItem(LLAVE_SESION); }catch(e){}
+  if(!t)return;
+  TOKEN=t;
+  try{
+    await api.cargar();
+    preView='lista';fSalon='todos';fEstado='todos';fTipo='todos';fAlc='auto';selE='todos';tab='tes';
+    document.getElementById('login').hidden=true;
+    document.getElementById('app').hidden=false;
+    document.getElementById('whoSub').textContent=ses.nom;
+    pintaTabs();draw();
+  }catch(err){
+    TOKEN=null;
+    try{ localStorage.removeItem(LLAVE_SESION); }catch(e){}
+  }
+})();
+function pintaTabs(){
+  const t=[['tes','Tesorería']];
+  if(ses.rol!=='mama')t.push(['pre','Presupuestos']);
+  else if(tab==='pre')t.push(['pre','Presupuesto']);
+  if(ses.rol==='admin')t.push(['cfg','Configuración']);
+  document.getElementById('tabs').innerHTML=t.map(([k,n])=>
+    `<button role="tab" aria-selected="${tab===k}" onclick="tab='${k}';pintaTabs();draw()">${n}</button>`).join('');
+}
+function draw(){
+  /* El grado sale del ciclo activo, no de un literal 'PS3'. */
+  const t=document.getElementById('hTit');
+  if(t)t.textContent='Tesorería'+(DB.ciclo&&DB.ciclo.grado?' '+DB.ciclo.grado:'');
+  document.getElementById('view').innerHTML=
+    tab==='tes'?vistaTes():tab==='pre'?vistaPre():vistaCfg()}
+
+/* ================= tesorería ================= */
+function agrega(evs){
+  /* Se arma desde SALONES, no con A/B/C quemadas. Con un cuarto grupo,
+     la versión vieja lo sumaba como cero y el total lo ignoraba: el
+     tablero enseñaba MENOS dinero del real y sin marcar error. */
+  const rec={},per={};
+  SALONES.forEach(s=>{rec[s.id]=0;per[s.id]=vacioPers()});
+  let presup=0,gas=0,gastos=[],ad=0,ni=0,na=0,pad=0,pni=0,pna=0;
+  evs.forEach(e=>{
+    SALONES.forEach(s=>{rec[s.id]+=(e.rec[s.id]||0);
+      const o=e.pers[s.id]||vacioPers();
+      per[s.id].ad+=o.ad||0;per[s.id].ni+=o.ni||0;per[s.id].na+=o.na||0;
+      ad+=o.ad||0;ni+=o.ni||0;na+=o.na||0});
+    const P=presDeEvento(e);if(P){presup+=totPres(P);pad+=P.adultos||0;pni+=P.ninos||0;pna+=P.ninas||0}
+    e.gastos.forEach(g=>{gas+=g.m;gastos.push({...g,ev:e.nom,evId:e.id})});
+  });
+  gastos.sort((x,y)=>y.f.localeCompare(x.f));
+  return {presup,gas,rec,per,gastos,ad,ni,na,pad,pni,pna,
+          total:SALONES.reduce((t,s)=>t+(rec[s.id]||0),0),pers:ad+ni+na};
+}
+function vistaTes(){
+  const vis=eventosVisibles();
+  if(!vis.length)return `<div class="card"><div class="empty">Todavía no hay eventos para ti.</div></div>`;
+  if(selE!=='todos'&&!vis.some(e=>e.id===selE))selE='todos';
+  const uno=selE==='todos'?null:ev(selE);
+  const evs=uno?[uno]:aplicaAlcance(vis);
+  const d=agrega(evs),bal=d.total-d.gas,pctS=d.total>0?Math.min(100,d.gas/d.total*100):0;
+  const items=[{id:'todos',nom:'Todos los eventos'}].concat(vis);
+  const filas=uno?salonesDe(uno):SALONES;
+  const cta=uno?presDeEvento(uno):null;
+  const editable=uno&&esTesorera(uno);
+  const maxP=Math.max(1,...filas.map(s=>sumaPers(d.per[s.id])));
+  return `
+  <div class="chips">${items.map(e=>`<button class="chip" aria-pressed="${selE===e.id}" onclick="selE='${e.id}';draw()">${esc(e.nom)}${e.tipo==='salon'?' · '+nomSalon(e.salon):''}</button>`).join('')}</div>
+  ${uno?'':`<div class="filtro"><select onchange="fAlc=this.value;draw()" aria-label="Qué eventos sumar">
+    ${opcionesAlcance().map(o=>`<option value="${o.v}" ${alcanceActual()===o.v?'selected':''}>${o.n}</option>`).join('')}
+  </select></div>`}
+  <div class="card hero">
+    <div class="hero-top">
+      <div class="label">${uno?'Balance del evento':'Balance de todo lo que ves'}</div>
+      ${uno?`<span class="badge ${uno.tipo==='salon'?'solo':'tipo'}">${uno.tipo==='salon'?'Solo '+nomSalon(uno.salon):'Toda la generación'}</span>`:''}
+    </div>
+    <div class="big num ${bal<0?'neg':''}">${mx(bal)}</div>
+    <div class="note">${d.total===0?'Todavía no se reporta recaudación.':mx(d.total)+' recaudados menos '+mx(d.gas)+' gastados'}</div>
+    <div class="bar"><i class="spent" style="width:${pctS}%"></i><i class="left" style="width:${d.total>0?100-pctS:0}%"></i></div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--shade)"></i> Gastado <b class="num">${mx(d.gas)}</b></span>
+      <span><i class="dot" style="background:var(--pos)"></i> Disponible <b class="num">${mx(Math.max(0,bal))}</b></span>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="stat${puedeVerPres()?' link':''}" ${puedeVerPres()?`role="button" tabindex="0" onclick="verDesglose()" onkeydown="if(event.key==='Enter')verDesglose()"`:''}>
+      <div class="k">Presupuesto del proyecto</div><div class="v num">${mx(d.presup)}</div>
+      ${puedeVerPres()?`<div class="go">Ver el desglose</div>`:''}</div>
+    <div class="stat${editable?' link':''}" ${editable?`role="button" tabindex="0" onclick="editaPersonas('${uno.id}')" onkeydown="if(event.key==='Enter')editaPersonas('${uno.id}')"`:''}>
+      <div class="k">Personas confirmadas</div><div class="v num">${d.pers}</div>
+      <div class="brk">${d.ad} adultos · ${d.ni} niños · ${d.na} niñas</div>
+      ${editable?`<div class="go">Editar</div>`:''}</div>
+    <div class="stat"><div class="k">Total recaudado</div><div class="v num">${mx(d.total)}</div></div>
+    <div class="stat"><div class="k">Monto gastado</div><div class="v num">${mx(d.gas)}</div></div>
+  </div>
+  ${uno&&cta?`<h2>Cuenta de este evento</h2>
+  <div class="card">
+    ${cta.banco||cta.clabe||cta.titular?`
+    <div class="field"><label>Banco</label><div class="amt">${esc(cta.banco)||'—'}</div></div>
+    <div class="field"><label>Nombre</label><div class="amt" style="min-width:0;text-align:right">${esc(cta.titular)||'—'}</div></div>
+    <div class="field"><label>CLABE</label><div class="amt" style="min-width:0">${esc(cta.clabe)||'—'}</div></div>
+    ${cta.clabe?`<div class="actions"><button class="btn ghost" onclick="copiaClabe('${esc(cta.clabe)}')">Copiar la CLABE</button></div>`:''}`
+    :`<div class="empty">Este evento todavía no tiene cuenta. Se captura en su presupuesto.</div>`}
+  </div>`:''}
+  <h2>Dinero recaudado por salón</h2>
+  <div class="card">${filas.map(s=>{const v=d.rec[s.id],w=d.total>0?v/d.total*100:0;
+    return `<div class="salon"><div class="tag" style="color:${s.color}">${s.nom}<div class="who">${s.reps}</div></div>
+      <div class="track"><i style="width:${w}%;background:${s.color}"></i></div>
+      ${editable?`<input type="number" min="0" value="${v}" aria-label="Recaudado ${s.nom}"
+        onchange="api.setRecaudado('${uno.id}','${s.id}',+this.value||0).then(()=>{draw();toast('Recaudación actualizada.')})">`
+      :`<div class="amt">${mx(v)}</div>`}</div>`}).join('')}
+    ${editable?`<p class="hint">Escribe el total que te reportó cada salón.</p>`:''}</div>
+  ${uno?`<h2>Personas confirmadas por salón</h2>
+  <div class="card">${filas.map(s=>{const o=d.per[s.id],v=sumaPers(o);
+    return `<div class="salon"><div class="tag" style="color:${s.color}">${s.nom}</div>
+      <div class="track"><i style="width:${v/maxP*100}%;background:${s.color}"></i></div>
+      <div class="amt">${v}<small>${o.ad} ad · ${o.ni} niños · ${o.na} niñas</small></div></div>`}).join('')}
+    <p class="hint">${editable?'Toca la tarjeta de Personas confirmadas para cambiar estos números.':'Cada salón le reporta cuántos van y cuánto juntaron.'}</p></div>`:''}
+  <h2>${uno?'Gastos realizados':'Gastos de todos los eventos'}</h2>
+  <div class="card">
+    <table><thead><tr><th>Concepto</th><th class="money">Monto</th></tr></thead><tbody>
+    ${d.gastos.length?d.gastos.map(g=>`<tr><td><div class="desc">${esc(g.d)}</div>
+      <div class="meta">${esc(g.p)} · ${fch(g.f)}${uno?'':' · '+esc(g.ev)}</div>
+      <button class="tick${g.ticket?'':' falta'}" onclick="verTicket('${g.evId}','${g.id}')">${g.ticket?'Ver ticket':'Sin ticket'}</button></td>
+      <td class="money">${mx(g.m)}</td></tr>`).join('')
+      :`<tr><td colspan="2"><div class="empty">Sin gastos capturados.</div></td></tr>`}
+    </tbody></table>
+    <div class="tfoot"><span>Total gastado</span><span class="v num">${mx(d.gas)}</span></div>
+    ${uno&&esTesorera(uno)?`<div class="actions"><button class="btn" onclick="nuevoGasto('${uno.id}')">Agregar gasto</button></div>`:''}
+  </div>`;
+}
+
+function alcanceActual(){
+  if(fAlc!=='auto')return fAlc;
+  return puedeVerTodos()?'todos':'gen+'+ses.salon;
+}
+function opcionesAlcance(){
+  if(puedeVerTodos()){
+    return [{v:'todos',n:'Todos los eventos'},{v:'gen',n:'Solo los de generación'}]
+      .concat(SALONES.map(s=>({v:'gen+'+s.id,n:'Generación más '+s.nom})))
+      .concat(SALONES.map(s=>({v:'solo'+s.id,n:'Solo los de '+s.nom})));
+  }
+  const m=ses.salon;
+  return [{v:'gen+'+m,n:'Generación más '+nomSalon(m)},
+          {v:'gen',n:'Solo los de generación'},
+          {v:'solo'+m,n:'Solo los de '+nomSalon(m)}];
+}
+function aplicaAlcance(lista){
+  const a=alcanceActual();
+  if(a==='todos')return lista;
+  if(a==='gen')return lista.filter(e=>e.tipo==='generacion');
+  if(a.startsWith('gen+')){const s=a.slice(4);return lista.filter(e=>e.tipo==='generacion'||e.salon===s)}
+  if(a.startsWith('solo')){const s=a.slice(4);return lista.filter(e=>e.tipo==='salon'&&e.salon===s)}
+  return lista;
+}
+function copiaClabe(c){
+  navigator.clipboard?.writeText(c).then(()=>toast('CLABE copiada.'),()=>toast('No se pudo copiar. Cópiala a mano.'));
+}
+
+function verDesglose(){
+  const vis=eventosVisibles();
+  const uno=selE==='todos'?null:ev(selE);
+  if(!uno){
+    if(ses.rol==='mama')return toast('Elige primero un evento arriba para ver su presupuesto.');
+    tab='pre';volverA='tes';preView='lista';pintaTabs();draw();window.scrollTo(0,0);return;
+  }
+  const P=presDeEvento(uno);
+  if(!P)return toast('Este evento no tiene presupuesto ligado.');
+  preId=P.id;preView='detalle';volverA='tes';tab='pre';pintaTabs();draw();window.scrollTo(0,0);
+}
+function volverPre(){
+  if(volverA==='tes'){tab='tes';volverA='pre';pintaTabs();draw();window.scrollTo(0,0);return}
+  preView='lista';draw();window.scrollTo(0,0);
+}
+
+/* ================= tickets ================= */
+function verTicket(eId,gId){
+  const e=ev(eId),g=e.gastos.find(x=>x.id===gId),puede=puedeTicket(e);
+  /* La foto no viene con los datos: se pide su URL firmada al abrir
+     este modal y vive 5 minutos. El <img> se llena cuando llega. */
+  const cuerpo=g.ticket
+    ?`<img class="ticket-img" id="tk-img" alt="Ticket de ${esc(g.d)}" hidden>
+      <div class="dropzone" id="tk-cargando">Cargando la foto…</div>
+      <p>${esc(g.ticket.nombre)} · lo subió ${esc(g.ticket.por)} el ${fchHora(g.ticket.cuando)}</p>`
+    :`<div class="dropzone">Todavía no hay ticket de este gasto.</div>`;
+  const acciones=puede
+    ?`<div class="actions">
+        ${g.ticket?`<button class="btn danger" data-del>Quitar</button>`:''}
+        <button class="btn" data-up>${g.ticket?'Cambiar foto':'Cargar ticket'}</button></div>`
+    :`<p class="hint">${g.ticket?'Solo quien lleva la tesorería de este evento puede cambiarlo.':'Solo quien lleva la tesorería de este evento puede cargarlo.'}</p>`;
+  modal(`<h3>${esc(g.d)}</h3><p>${esc(g.p)} · ${fch(g.f)} · ${mx(g.m)}</p>${cuerpo}
+    <input type="file" accept="image/*" id="tk-file" hidden>${acciones}
+    <div class="actions"><button class="btn ghost" data-close>Cerrar</button></div>`,
+  (m,cierra)=>{
+    m.querySelector('[data-close]').onclick=cierra;
+    const up=m.querySelector('[data-up]'),del=m.querySelector('[data-del]'),file=m.querySelector('#tk-file');
+
+    if(g.ticket){
+      const img=m.querySelector('#tk-img'),cargando=m.querySelector('#tk-cargando');
+      api.verTicketUrl(eId,gId).then(u=>{
+        img.onload=()=>{img.hidden=false;cargando.remove()};
+        img.onerror=()=>{cargando.textContent='La foto no se pudo abrir. Cierra y vuelve a intentar.'};
+        img.src=u;
+      }).catch(err=>{cargando.textContent=err.message;falloSesion(err)});
+    }
+
+    if(up)up.onclick=()=>file.click();
+    if(file)file.onchange=async()=>{
+      const f=file.files[0];if(!f)return;
+      if(f.size>8*1024*1024)return toast('La foto pesa más de 8 MB. Tómala en menor calidad.');
+      up.disabled=true;up.textContent='Subiendo…';
+      try{
+        await api.subirTicket(eId,gId,f);
+        cierra();draw();toast('Ticket cargado.');
+      }catch(err){
+        up.disabled=false;up.textContent='Cargar ticket';
+        toast(err.message);falloSesion(err);
+      }
+    };
+    if(del)del.onclick=async()=>{
+      if(!await confirmar('Quitar ticket',`Se va a borrar la foto del ticket de "${g.d}". El gasto se queda.`,'Quitar'))return;
+      try{ await api.quitarTicket(eId,gId);cierra();draw();toast('Ticket quitado.'); }
+      catch(err){ toast(err.message);falloSesion(err); }
+    };
+  });
+}
+
+function editaPersonas(eId){
+  const e=ev(eId),filas=salonesDe(e);
+  modal(`<h3>Personas confirmadas</h3><p>${esc(e.nom)}. Estos números son los de la realidad, no los del presupuesto, y los puedes mover cuando cambien.</p>
+    ${filas.map(s=>`<h2 style="margin:16px 0 4px">${s.nom}</h2>
+      <div class="field"><label>Adultos</label><input type="number" min="0" id="pp-${s.id}-ad" value="${(e.pers[s.id]||{}).ad||0}"></div>
+      <div class="field"><label>Niños</label><input type="number" min="0" id="pp-${s.id}-ni" value="${(e.pers[s.id]||{}).ni||0}"></div>
+      <div class="field"><label>Niñas</label><input type="number" min="0" id="pp-${s.id}-na" value="${(e.pers[s.id]||{}).na||0}"></div>`).join('')}
+    <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Guardar</button></div>`,
+  (m,cierra)=>{
+    m.querySelector('[data-no]').onclick=cierra;
+    m.querySelector('[data-si]').onclick=async()=>{
+      for(const s of filas){
+        await api.setPersonas(eId,s.id,{
+          ad:+m.querySelector(`#pp-${s.id}-ad`).value||0,
+          ni:+m.querySelector(`#pp-${s.id}-ni`).value||0,
+          na:+m.querySelector(`#pp-${s.id}-na`).value||0});
+      }
+      cierra();draw();toast('Personas actualizadas.');
+    };
+  });
+}
+
+function nuevoGasto(eId){
+  const hoy=new Date().toISOString().slice(0,10);
+  modal(`<h3>Nuevo gasto</h3><p>${esc(ev(eId).nom)}</p>
+    <div class="inp" style="margin-top:14px"><label for="gx-d">Descripción</label><input id="gx-d" placeholder="Renta de brincolín"></div>
+    <div class="inp"><label for="gx-p">Proveedor</label><input id="gx-p" placeholder="Diversiones Kikos"></div>
+    <div class="inp"><label for="gx-m">Monto total</label><input id="gx-m" type="number" min="0" placeholder="0"></div>
+    <div class="inp"><label for="gx-f">Fecha del pago</label><input id="gx-f" type="date" value="${hoy}"></div>
+    <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Agregar</button></div>`,
+  (m,cierra)=>{
+    m.querySelector('[data-no]').onclick=cierra;
+    m.querySelector('[data-si]').onclick=async()=>{
+      const d=m.querySelector('#gx-d').value.trim(),p=m.querySelector('#gx-p').value.trim(),
+            mo=+m.querySelector('#gx-m').value||0,f=m.querySelector('#gx-f').value;
+      if(!d||mo<=0)return toast('Falta la descripción o el monto.');
+      await api.addGasto(eId,{f,d,p:p||'Sin proveedor',m:mo});cierra();draw();toast('Gasto registrado.');
+    };
+    m.querySelector('#gx-d').focus();
+  });
+}
+
+/* ================= presupuestos ================= */
+function vistaPre(){return preView==='detalle'&&pres(preId)?detallePre():listaPre()}
+function tarjeta(P){
+  const et=etiqueta(P),conf=P.estado==='confirmado',s=SALONES.find(x=>x.id===P.salon),prest=prestamoVivo(P);
+  return `<div class="pcard" role="button" tabindex="0" onclick="abrePre('${P.id}')"
+      onkeydown="if(event.key==='Enter')abrePre('${P.id}')">
+    <div class="pcard-top">
+      <div><div class="pcard-nom">${esc(P.nom)}</div>
+        <div class="meta">${fch(P.fecha)} · lo prepara <b style="color:${s.color}">${s.nom}</b></div></div>
+      <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">
+        <span class="badge ${conf?'closed':(et==='Sin empezar'?'none':'open')}">${et}</span>
+        <span class="badge ${P.tipo==='salon'?'solo':'tipo'}">${P.tipo==='salon'?'Solo '+s.nom:'Toda la generación'}</span></div>
+    </div>
+    <div class="pcard-bot"><span>${totPersonas(P)} persona(s)</span>
+      <span class="num" style="font-weight:600">${mx(totPres(P))}</span></div>
+    ${conf?`<div class="pcard-ok">Evento creado: ${esc(P.nom)}</div>`:''}
+    ${prest?`<div class="pcard-lend">Prestado a ${nomSalon(P.prestamo.a)} hasta el ${fchHora(P.prestamo.hasta)}</div>`:''}
+  </div>`;
+}
+function listaPre(){
+  const prestados=DB.presupuestos.filter(P=>ses.rol==='rep'&&vePres(P)&&prestamoVivo(P)&&P.prestamo.a===ses.salon&&P.salon!==ses.salon);
+  let lista=DB.presupuestos.filter(vePres);
+  if(fSalon!=='todos')lista=lista.filter(P=>P.salon===fSalon);
+  if(fTipo!=='todos')lista=lista.filter(P=>P.tipo===fTipo);
+  if(fEstado!=='todos')lista=lista.filter(P=>fEstado==='confirmado'?P.estado==='confirmado':P.estado!=='confirmado');
+  lista.sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  return `
+  <div class="filtro">
+    <select onchange="fEstado=this.value;draw()" aria-label="Filtrar por estado">
+      <option value="todos" ${fEstado==='todos'?'selected':''}>Todos los estados</option>
+      <option value="creacion" ${fEstado==='creacion'?'selected':''}>En creación</option>
+      <option value="confirmado" ${fEstado==='confirmado'?'selected':''}>Confirmados</option>
+    </select>
+    <select onchange="fTipo=this.value;draw()" aria-label="Filtrar por tipo">
+      <option value="todos" ${fTipo==='todos'?'selected':''}>Todos los tipos</option>
+      <option value="generacion" ${fTipo==='generacion'?'selected':''}>Toda la generación</option>
+      <option value="salon" ${fTipo==='salon'?'selected':''}>De un salón</option>
+    </select>
+  </div>
+  ${ses.rol==='admin'?`<div class="filtro">
+    <select onchange="fSalon=this.value;draw()" aria-label="Filtrar por salón">
+      <option value="todos" ${fSalon==='todos'?'selected':''}>Todos los salones</option>
+      ${SALONES.map(x=>`<option value="${x.id}" ${fSalon===x.id?'selected':''}>Lo prepara ${x.nom}</option>`).join('')}
+    </select>
+  </div>`:''}
+  <div class="actions" style="margin:0 0 14px"><button class="btn" onclick="nuevoPres()">Nuevo presupuesto</button></div>
+  ${prestados.length?`<h2>Prestados a ti</h2>${prestados.map(tarjeta).join('')}`:''}
+  ${lista.length?lista.map(tarjeta).join(''):`<div class="card"><div class="empty">No hay presupuestos con ese filtro.</div></div>`}`;
+}
+function abrePre(id){
+  const P=pres(id);
+  if(!P||!vePres(P)){toast('Ese presupuesto es de otro salón.');preView='lista';draw();return}
+  preId=id;preView='detalle';volverA='pre';draw();window.scrollTo(0,0);
+}
+
+function detallePre(){
+  const P=pres(preId);
+  if(!vePres(P)){preView='lista';return listaPre()}
+  const conf=P.estado==='confirmado',admin=ses.rol==='admin';
+  const dueno=ses.rol==='rep'&&P.salon===ses.salon;
+  const puede=puedeEditarPres(P),dis=puede?'':'disabled';
+  const total=totPres(P),kids=chamacos(P),cuota=kids>0?Math.ceil(total/kids/10)*10:0;
+  const prest=prestamoVivo(P);
+  let banner='';
+  if(prest&&(dueno||admin))banner=`<div class="lend"><span>Prestado a ${nomSalon(P.prestamo.a)} hasta el ${fchHora(P.prestamo.hasta)}</span>
+    <button onclick="terminaPrestamo()">Terminar</button></div>`;
+  else if(prest&&ses.salon===P.prestamo.a)banner=`<div class="lend"><span>${nomSalon(P.salon)} te lo prestó hasta el ${fchHora(P.prestamo.hasta)}</span></div>`;
+  let aviso='';
+  if(conf&&puedeConfirmar(P))aviso=`<div class="lockmsg">Confirmado. Como tesorera de este evento puedes corregirlo aquí mismo, y lo que cambies entra directo al tablero.</div>`;
+  else if(conf)aviso=`<div class="lockmsg">Ya está confirmado y el evento "${esc(P.nom)}" existe. Si necesitas cambiar algo, pídeselo a ${P.tipo==='salon'?nomSalon(P.salon):'Caro'}.</div>`;
+  else if(ses.rol==='mama')aviso=`<div class="lockmsg">Estás viendo el desglose del presupuesto. Solo lectura.</div>`;
+  else if(!puede)aviso=`<div class="lockmsg">Este presupuesto lo lleva ${nomSalon(P.salon)}.</div>`;
+  else if(P.tipo==='generacion'&&!admin)aviso=`<div class="lockmsg">Es de generación, así que Caro es quien lo confirma y lleva su tesorería.</div>`;
+  let botones='';
+  const acc=[];
+  if(puedeConfirmar(P))acc.push(conf
+    ?`<button class="btn ghost" onclick="devolverP()">Devolver para editar</button>`
+    :`<button class="btn" onclick="confirmarP()">Confirmar y crear el evento</button>`);
+  if(dueno&&!conf)acc.push(`<button class="btn ghost" onclick="abrePrestamo()">${prest?'Cambiar préstamo':'Prestar para que me ayuden'}</button>`);
+  if(admin)acc.push(`<button class="btn ghost" onclick="borraPres()">Eliminar</button>`);
+  if(acc.length)botones=`<div class="actions">${acc.join('')}</div>`;
+  if(!puedeConfirmar(P)&&puede)botones+=`<p class="hint">Cuando termines, avísale a Caro. Ella lo confirma y con eso se crea el evento.</p>`;
+  return `
+  <button class="volver" onclick="volverPre()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    ${volverA==='tes'?'Volver al tablero':'Volver a los presupuestos'}</button>
+  ${banner}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px">
+      <div><div class="pcard-nom">${esc(P.nom)}</div>
+        <div class="meta">${fch(P.fecha)} · lo prepara ${nomSalon(P.salon)}</div></div>
+      <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">
+        <span class="badge ${conf?'closed':'open'}">${etiqueta(P)}</span>
+        <span class="badge ${P.tipo==='salon'?'solo':'tipo'}">${P.tipo==='salon'?'Solo '+nomSalon(P.salon):'Toda la generación'}</span></div></div>
+    <div class="field"><label>Nombre del evento</label>
+      <input value="${esc(P.nom)}" ${dis} onchange="api.setPres(preId,{nom:this.value}).then(draw)"></div>
+    <div class="field"><label>Fecha del evento</label>
+      <input type="date" value="${P.fecha}" ${dis} onchange="api.setPres(preId,{fecha:this.value}).then(draw)"></div>
+    <div class="field"><label>Quién lo llena</label>
+      <input value="${esc(P.rep)}" ${dis} oninput="api.setPres(preId,{rep:this.value})"></div>
+    <div class="field"><label>Niños que asisten</label>
+      <input type="number" min="0" value="${P.ninos||0}" ${dis} onchange="api.setPres(preId,{ninos:+this.value||0}).then(draw)"></div>
+    <div class="field"><label>Niñas que asisten</label>
+      <input type="number" min="0" value="${P.ninas||0}" ${dis} onchange="api.setPres(preId,{ninas:+this.value||0}).then(draw)"></div>
+    <div class="field"><label>Adultos</label>
+      <input type="number" min="0" value="${P.adultos||0}" ${dis} onchange="api.setPres(preId,{adultos:+this.value||0}).then(draw)"></div>
+    <div class="field"><label>Personas en total</label><input value="${totPersonas(P)}" disabled></div>
+  </div>
+  <h2>Cuenta donde se deposita</h2>
+  <div class="card">
+    <div class="field"><label>Banco</label>
+      <input value="${esc(P.banco)}" ${dis} placeholder="BBVA" onchange="api.setPres(preId,{banco:this.value}).then(draw)"></div>
+    <div class="field"><label>Nombre del titular</label>
+      <input value="${esc(P.titular)}" ${dis} placeholder="A nombre de quién" onchange="api.setPres(preId,{titular:this.value}).then(draw)"></div>
+    <div class="field"><label>CLABE</label>
+      <input value="${esc(P.clabe)}" ${dis} inputmode="numeric" maxlength="18" placeholder="18 dígitos" onchange="api.setPres(preId,{clabe:this.value.replace(/\\D/g,'')}).then(draw)"></div>
+    ${P.clabe&&P.clabe.length!==18?`<p class="hint">La CLABE lleva 18 dígitos. Ésta trae ${P.clabe.length}.</p>`:''}
+    <p class="hint">Es la cuenta de este evento y sale en su tablero para que las mamás depositen.</p>
+  </div>
+  <h2>Conceptos que se van a pagar</h2>
+  <div class="card">
+    <div class="conc"><span class="head">Concepto</span><span class="head" style="text-align:right">Cant.</span><span class="head" style="text-align:right">P. unit.</span><span></span></div>
+    ${P.c.length?P.c.map((k,i)=>`<div class="conc">
+      <input value="${esc(k.d)}" ${dis} oninput="api.setConcepto(preId,${i},'d',this.value)" aria-label="Concepto">
+      <input class="n" type="number" min="0" value="${k.q}" ${dis} onchange="api.setConcepto(preId,${i},'q',+this.value||0).then(draw)" aria-label="Cantidad">
+      <input class="n" type="number" min="0" value="${k.u}" ${dis} onchange="api.setConcepto(preId,${i},'u',+this.value||0).then(draw)" aria-label="Precio unitario">
+      ${puede?`<button class="del" onclick="quitaConcepto(${i})" aria-label="Quitar">×</button>`:'<span></span>'}
+    </div>`).join(''):`<div class="empty">Sin conceptos todavía.</div>`}
+    ${puede?`<button class="addrow" onclick="api.addConcepto(preId).then(draw)">Agregar concepto</button>`:''}
+    <div class="result"><span>Dinero que se necesita</span><span class="v">${mx(total)}</span></div>
+    <div class="result" style="border-top:1px solid var(--line)"><span>Cuota sugerida por niño</span><span class="v">${kids>0?mx(cuota):'—'}</span></div>
+    ${aviso}${botones}
+  </div>`;
+}
+
+function nuevoPres(){
+  const hoy=new Date().toISOString().slice(0,10),admin=ses.rol==='admin';
+  modal(`<h3>Nuevo presupuesto</h3><p>Un presupuesto por evento. Lo lleva el salón que lo crea.</p>
+    <div class="inp" style="margin-top:14px"><label for="np-n">Nombre del evento</label><input id="np-n" placeholder="Kermés de mayo"></div>
+    <div class="inp"><label for="np-f">Fecha</label><input id="np-f" type="date" value="${hoy}"></div>
+    <div class="inp"><label for="np-t">Tipo de evento</label><select id="np-t">
+      <option value="generacion">De generación, para los tres salones</option>
+      <option value="salon">De salón, solo para el mío</option></select></div>
+    ${admin?`<div class="inp"><label for="np-s">Salón que lo lleva</label><select id="np-s">${SALONES.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('')}</select></div>`:''}
+    <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Crear</button></div>`,
+  (m,cierra)=>{
+    m.querySelector('[data-no]').onclick=cierra;
+    m.querySelector('[data-si]').onclick=async()=>{
+      const n=m.querySelector('#np-n').value.trim(),f=m.querySelector('#np-f').value,t=m.querySelector('#np-t').value;
+      if(!n)return toast('Ponle nombre al evento.');
+      const salon=admin?m.querySelector('#np-s').value:ses.salon;
+      const id=await api.crearPres(n,f,salon,t);cierra();abrePre(id);
+      toast(t==='salon'?'Presupuesto de salón creado. Tú llevas su tesorería.':'Presupuesto creado. Caro lo confirma.');
+    };
+    m.querySelector('#np-n').focus();
+  });
+}
+function abrePrestamo(){
+  const P=pres(preId),otros=SALONES.filter(s=>s.id!==P.salon);
+  modal(`<h3>Prestar el presupuesto</h3><p>El salón que elijas lo va a poder editar hasta que se venza el plazo. Solo sirve para que te ayuden a llenarlo.</p>
+    <div class="inp" style="margin-top:14px"><label for="pr-s">¿A quién se lo prestas?</label>
+      <select id="pr-s">${otros.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('')}</select></div>
+    <div class="inp"><label for="pr-d">¿Por cuánto tiempo?</label>
+      <select id="pr-d"><option value="1">1 día</option><option value="3">3 días</option></select></div>
+    <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Prestar</button></div>`,
+  (m,cierra)=>{
+    m.querySelector('[data-no]').onclick=cierra;
+    m.querySelector('[data-si]').onclick=async()=>{
+      const s=m.querySelector('#pr-s').value,d=+m.querySelector('#pr-d').value;
+      await api.prestar(preId,s,d);cierra();draw();
+      toast(`Prestado a ${nomSalon(s)} hasta el ${fchHora(pres(preId).prestamo.hasta)}.`);
+    };
+  });
+}
+async function terminaPrestamo(){
+  const P=pres(preId);
+  if(!await confirmar('Terminar el préstamo',`${nomSalon(P.prestamo.a)} va a dejar de poder editar este presupuesto ahora mismo.`,'Terminar'))return;
+  await api.quitarPrestamo(preId);draw();toast('Préstamo terminado.');
+}
+async function quitaConcepto(i){
+  const k=pres(preId).c[i],nom=k.d?`"${k.d}"`:'este renglón sin nombre';
+  if(!await confirmar('Quitar concepto',`Se va a quitar ${nom} por ${mx((k.q||0)*(k.u||0))}. El total baja de inmediato.`,'Quitar'))return;
+  await api.delConcepto(preId,i);draw();toast('Concepto quitado.');
+}
+async function confirmarP(){
+  const P=pres(preId);
+  if(totPres(P)<=0)return toast('No se puede confirmar un presupuesto en ceros.');
+  await api.confirmar(preId);draw();toast('Confirmado. El evento ya está en el tablero.');
+}
+async function devolverP(){await api.devolver(preId);draw();toast('Devuelto a '+nomSalon(pres(preId).salon)+'.')}
+async function borraPres(){
+  const P=pres(preId),e=eventoDe(preId);
+  const extra=e?` Ojo: ya tiene evento creado con ${e.gastos.length} gasto(s). El evento se queda, pero pierde su presupuesto.`:'';
+  if(!await confirmar('Eliminar presupuesto',`Se va a borrar "${P.nom}" por ${mx(totPres(P))}.${extra} No se puede deshacer.`))return;
+  await api.delPres(preId);preView='lista';draw();toast('Presupuesto eliminado.');
+}
+
+/* ================= configuración ================= */
+const ROLES={admin:'Tesorera general',rep:'Representante de salón',mama:'Solo ver'};
+function vistaCfg(){
+  const c=DB.ciclo||{};
+  return `
+  <h2>Ciclo escolar</h2>
+  <div class="card">
+    <div class="field"><label>Activo</label>
+      <div class="amt" style="min-width:0;text-align:right">${esc(c.nombre)||'—'} · ${esc(c.grado)||'—'}</div></div>
+    ${DB.ciclos.length>1?`<p class="hint">Otros ciclos: ${DB.ciclos.filter(x=>!x.activo).map(x=>esc(x.nombre)).join(', ')}</p>`:''}
+    <div class="actions"><button class="btn ghost" onclick="nuevoCiclo()">Crear un ciclo</button></div>
+  </div>
+
+  ${DB.ciclos.filter(x=>!x.activo).length?`
+  <h2>Cambiar de ciclo</h2>
+  <div class="card">
+    ${DB.ciclos.filter(x=>!x.activo).map(x=>`
+      <div class="field"><label style="flex:1">${esc(x.nombre)} · ${esc(x.grado)}<br>
+        <span class="meta">${x.grupos} grupo(s) · ${x.personas} persona(s)</span></label>
+        <button class="btn ghost" onclick="activaCiclo('${x.id}','${esc(x.nombre)}')">Activar</button></div>`).join('')}
+    <p class="hint">Al activar otro ciclo, todos entran a ese año. Lo del año anterior no se borra: se queda guardado y vuelve a verse si lo reactivas.</p>
+  </div>`:''}
+
+  <h2>Salones</h2>
+  <div class="card">
+    ${SALONES.length?SALONES.map(s=>`
+      <div class="field">
+        <label style="flex:1"><span style="color:${s.color}">●</span> ${esc(s.nom)}
+          <br><span class="meta">Letra ${esc(s.letra||'')}</span></label>
+        <input value="${esc(s.nom)}" style="max-width:120px" aria-label="Nombre de ${esc(s.nom)}"
+          onchange="renombraGrupo('${s.id}',this.value)">
+        <input type="color" value="${esc(s.color)}" style="max-width:52px;padding:2px" aria-label="Color de ${esc(s.nom)}"
+          onchange="recoloraGrupo('${s.id}',this.value)">
+        <button class="del" onclick="borraGrupo('${s.id}','${esc(s.nom)}')" aria-label="Eliminar salón">×</button>
+      </div>`).join(''):`<div class="empty">Este ciclo todavía no tiene salones.</div>`}
+    <button class="addrow" onclick="nuevoGrupo()">Agregar un salón</button>
+    <p class="hint">Estos son los salones que ve toda la aplicación. Pueden ser tres, cuatro o los que haya. Un salón solo se puede borrar si nadie está asignado a él y no tiene presupuestos ni eventos.</p>
+  </div>
+
+  <h2>Eventos creados</h2>
+  <div class="card">
+    ${DB.eventos.length?DB.eventos.map(x=>{
+      const P=presDeEvento(x);
+      return `<div class="field"><label style="flex:1">${esc(x.nom)}<br>
+        <span class="meta">${fch(x.fecha)} · ${x.tipo==='salon'?'de '+nomSalon(x.salon):'de generación'} · ${P?mx(totPres(P)):'sin presupuesto'} · ${x.gastos.length} gasto(s)</span></label>
+        <button class="del" onclick="borraEvento('${x.id}')" aria-label="Eliminar evento">×</button></div>`}).join('')
+      :`<div class="empty">Sin eventos. Confirma un presupuesto para crear el primero.</div>`}
+    <p class="hint">La recaudación, las personas y los gastos se editan en la pestaña de Tesorería, entrando a cada evento.</p>
+  </div>
+
+  <h2>Accesos y permisos</h2>
+  ${DB.usuarios.map(x=>{
+    const yo=x.u===ses.u;
+    const bloq=yo?'disabled':'';
+    return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div class="pcard-nom">${esc(x.u)}</div>
+      <span class="badge ${x.activo?'closed':'none'}">${x.activo?'Activa':'Desactivada'}</span></div>
+    <div class="meta" style="margin-bottom:6px">${esc(x.nom)}${yo?' · eres tú':''}</div>
+    <div class="field"><label>Nivel</label>
+      <select ${bloq} onchange="setUser('${x.id}',{rol:this.value})">
+        ${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${x.rol===k?'selected':''}>${v}</option>`).join('')}</select></div>
+    ${x.rol!=='admin'?`<div class="field"><label>Salón</label>
+      <select ${bloq} onchange="setUser('${x.id}',{grupo_id:this.value})">
+        ${SALONES.map(s=>`<option value="${s.id}" ${x.salon===s.id?'selected':''}>${esc(s.nom)}</option>`).join('')}</select></div>`:''}
+    <div class="field"><label>Puede cargar tickets</label>
+      <select ${bloq} onchange="setPerm('${x.id}','tickets',this.value==='si')">
+        <option value="si" ${x.tickets?'selected':''}>Sí</option>
+        <option value="no" ${!x.tickets?'selected':''}>No</option></select></div>
+    <div class="field"><label>Puede ver todos los salones</label>
+      <select ${bloq} onchange="setPerm('${x.id}','ver_todos_los_grupos',this.value==='si')">
+        <option value="si" ${x.verTodos?'selected':''}>Sí</option>
+        <option value="no" ${!x.verTodos?'selected':''}>No</option></select></div>
+    <div class="field"><label>Puede ver el presupuesto</label>
+      <select ${bloq} onchange="setPerm('${x.id}','ver_presupuesto',this.value==='si')">
+        <option value="si" ${x.verPres?'selected':''}>Sí</option>
+        <option value="no" ${!x.verPres?'selected':''}>No</option></select></div>
+    <div class="field"><label>Cuenta</label>
+      <select ${bloq} onchange="setUser('${x.id}',{activo:this.value==='si'})">
+        <option value="si" ${x.activo?'selected':''}>Activa</option>
+        <option value="no" ${!x.activo?'selected':''}>Desactivada</option></select></div>
+    <div class="field"><label>Contraseña</label>
+      <button class="btn ghost" onclick="nuevaClave('${x.id}','${esc(x.u)}')">Poner una nueva</button></div>
+    ${yo?`<p class="hint">Tus propios permisos no se editan desde aquí, para que nadie —ni tú— se quede fuera por accidente. Tu contraseña la cambias con el enlace del pie.</p>`:''}
+  </div>`}).join('')}
+  <div class="card"><button class="addrow" onclick="nuevaPersona()">Dar de alta a alguien</button>
+    <p class="hint">La contraseña nunca se guarda ni se muestra en claro: se guarda revuelta y no hay forma de leerla de vuelta. Si alguien la olvida, le pones una nueva.</p></div>
+
+  <h2>Pasar de año</h2>
+  <div class="card">
+    <p class="hint" style="margin-top:0">Crea el ciclo nuevo, copia los salones con su color y pasa a todas las personas con su mismo rol y salón. <b>No activa nada y no toca el año actual</b>: los presupuestos, eventos y gastos de este año se quedan donde están. Después reasignas salones y roles con calma, y cuando esté listo lo activas arriba.</p>
+    <div class="actions"><button class="btn" onclick="pasarDeAno()">Pasar de año</button></div>
+  </div>`;
+}
+
+/* ---- acciones de Configuración ---- */
+async function conAviso(fn,ok){
+  try{ await fn(); draw(); if(ok)toast(ok); }
+  catch(err){ toast(err.message); falloSesion(err); draw(); }
+}
+async function setUser(id,patch){
+  await conAviso(()=>api.setUsuario(id,patch),'Permisos actualizados.');
+}
+async function setPerm(id,llave,valor){
+  const u=DB.usuarios.find(x=>x.id===id);
+  const p={tickets:u.tickets,ver_presupuesto:u.verPres,ver_todos_los_grupos:u.verTodos};
+  p[llave]=valor;
+  await conAviso(()=>api.setUsuario(id,{permisos:p}),'Permisos actualizados.');
+}
+function nuevaClave(id,usuario){
+  modal(`<h3>Contraseña nueva</h3><p>Para ${esc(usuario)}. Mínimo 8 caracteres. Al guardar, la anterior deja de servir.</p>
+    <div class="inp"><label for="nc-p">Contraseña</label><input id="nc-p" type="text" autocomplete="off"></div>
+    <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Guardar</button></div>`,
+  (m,cierra)=>{
+    m.querySelector('[data-no]').onclick=cierra;
+    m.querySelector('[data-si]').onclick=async()=>{
+      const v=m.querySelector('#nc-p').value;
+      if(v.length<8)return toast('Tiene que ser de al menos 8 caracteres.');
+      cierra();await conAviso(()=>api.ponerClave(id,v),'Contraseña actualizada.');
+    };
+    m.querySelector('#nc-p').focus();
+  });
+}
+function nuevaPersona(){
+  modal(`<h3>Dar de alta</h3>
+    <div class="inp"><label for="np-nom">Nombre</label><input id="np-nom" placeholder="Mariana Treviño"></div>
+    <div class="inp"><label for="np-u">Usuario</label><input id="np-u" placeholder="P3B" autocapitalize="characters"></div>
+    <div class="inp"><label for="np-p">Contraseña</label><input id="np-p" type="text" autocomplete="off"></div>
+    <div class="inp"><label for="np-r">Nivel</label><select id="np-r">
+      ${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${k==='mama'?'selected':''}>${v}</option>`).join('')}</select></div>
+    <div class="inp"><label for="np-g">Salón</label><select id="np-g">
+      ${SALONES.map(s=>`<option value="${s.id}">${esc(s.nom)}</option>`).join('')}</select></div>
+    <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Dar de alta</button></div>`,
+  (m,cierra)=>{
+    m.querySelector('[data-no]').onclick=cierra;
+    m.querySelector('[data-si]').onclick=async()=>{
+      const nom=m.querySelector('#np-nom').value.trim(),u=m.querySelector('#np-u').value.trim(),
+            p=m.querySelector('#np-p').value,rol=m.querySelector('#np-r').value,g=m.querySelector('#np-g').value;
+      if(!nom||!u)return toast('Falta el nombre o el usuario.');
+      if(p.length<8)return toast('La contraseña tiene que ser de al menos 8 caracteres.');
+      cierra();
+      await conAviso(()=>api.crearPersona({nombre:nom,usuario:u,clave:p,rol,
+        grupo_id:rol==='admin'?null:g,
+        permisos:{tickets:rol!=='mama',ver_presupuesto:true,ver_todos_los_grupos:rol==='admin'}}),
+        'Cuenta creada.');
+    };
+    m.querySelector('#np-nom').focus();
+  });
+}
+function nuevoGrupo(){
+  modal(`<h3>Salón nuevo</h3>
+    <div class="inp"><label for="ng-l">Letra</label><input id="ng-l" maxlength="2" placeholder="D" autocapitalize="characters"></div>
+    <div class="inp"><label for="ng-n">Nombre visible</label><input id="ng-n" placeholder="PS3D"></div>
+    <div class="inp"><label for="ng-c">Color</label><input id="ng-c" type="color" value="#12806A"></div>
+    <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Crear</button></div>`,
+  (m,cierra)=>{
+    m.querySelector('[data-no]').onclick=cierra;
+    m.querySelector('[data-si]').onclick=async()=>{
+      const l=m.querySelector('#ng-l').value.trim(),n=m.querySelector('#ng-n').value.trim();
+      if(!l||!n)return toast('Falta la letra o el nombre.');
+      cierra();
+      await conAviso(()=>api.setGrupo('crear',{letra:l,nombre:n,color:m.querySelector('#ng-c').value,
+        orden:SALONES.length+1}),'Salón creado.');
+    };
+    m.querySelector('#ng-l').focus();
+  });
+}
+async function renombraGrupo(id,nombre){
+  if(!nombre.trim())return toast('El nombre no puede quedar vacío.');
+  await conAviso(()=>api.setGrupo('editar',{grupo_id:id,nombre:nombre.trim()}),'Salón actualizado.');
+}
+async function recoloraGrupo(id,color){
+  await conAviso(()=>api.setGrupo('editar',{grupo_id:id,color}),'Color actualizado.');
+}
+async function borraGrupo(id,nom){
+  if(!await confirmar('Eliminar salón',`Se va a quitar "${nom}". Solo se puede si nadie está asignado a él y no tiene presupuestos ni eventos.`))return;
+  await conAviso(()=>api.setGrupo('eliminar',{grupo_id:id}),'Salón eliminado.');
+}
+function nuevoCiclo(){
+  modal(`<h3>Ciclo nuevo</h3><p>Nace vacío y sin activar. Para copiar salones y personas del ciclo actual, usa <b>Pasar de año</b>.</p>
+    <div class="inp"><label for="nn-n">Nombre</label><input id="nn-n" placeholder="2027-2028"></div>
+    <div class="inp"><label for="nn-g">Grado</label><input id="nn-g" placeholder="PS4"></div>
+    <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Crear</button></div>`,
+  (m,cierra)=>{
+    m.querySelector('[data-no]').onclick=cierra;
+    m.querySelector('[data-si]').onclick=async()=>{
+      const n=m.querySelector('#nn-n').value.trim(),g=m.querySelector('#nn-g').value.trim();
+      if(!n||!g)return toast('Falta el nombre o el grado.');
+      cierra();await conAviso(()=>api.crearCiclo({nombre:n,grado:g}),'Ciclo creado.');
+    };
+    m.querySelector('#nn-n').focus();
+  });
+}
+async function activaCiclo(id,nom){
+  if(!await confirmar('Cambiar de ciclo',`Todos van a entrar al ciclo "${nom}". Lo de este año no se borra: se queda guardado. Solo se puede si ese ciclo ya tiene salones y una tesorera general.`,'Activar'))return;
+  await conAviso(()=>api.activarCiclo(id),'Ciclo activado.');
+}
+function pasarDeAno(){
+  const c=DB.ciclo||{};
+  modal(`<h3>Pasar de año</h3>
+    <p>Se crea el ciclo nuevo, se copian los ${SALONES.length} salón(es) con su color y pasan las ${DB.usuarios.filter(u=>u.activo).length} persona(s) activas con su mismo rol y salón. <b>El ciclo nuevo NO se activa</b> y el actual (${esc(c.nombre)}) no se toca.</p>
+    <div class="inp"><label for="pa-n">Nombre del ciclo nuevo</label><input id="pa-n" placeholder="2027-2028"></div>
+    <div class="inp"><label for="pa-g">Grado nuevo</label><input id="pa-g" placeholder="PS4"></div>
+    <p class="hint">Los nombres de los salones se renombran solos si empiezan con el grado: ${esc(c.grado||'PS3')}A pasa a ser (grado nuevo)A.</p>
+    <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Pasar de año</button></div>`,
+  (m,cierra)=>{
+    m.querySelector('[data-no]').onclick=cierra;
+    m.querySelector('[data-si]').onclick=async()=>{
+      const n=m.querySelector('#pa-n').value.trim(),g=m.querySelector('#pa-g').value.trim();
+      if(!n||!g)return toast('Falta el nombre o el grado.');
+      cierra();
+      await conAviso(async()=>{
+        const j=await api.pasarDeAno({nombre:n,grado:g});
+        toast('Listo: '+(j.grupos_copiados||0)+' salón(es) y '+(j.afectadas||0)+' persona(s) en el ciclo nuevo.');
+      });
+    };
+    m.querySelector('#pa-n').focus();
+  });
+}
+function miPassword(){
+  modal(`<h3>Cambiar mi contraseña</h3>
+    <div class="inp"><label for="mp-a">Contraseña actual</label><input id="mp-a" type="password" autocomplete="current-password"></div>
+    <div class="inp"><label for="mp-n">Nueva</label><input id="mp-n" type="password" autocomplete="new-password"></div>
+    <p class="hint">Mínimo 8 caracteres.</p>
+    <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Guardar</button></div>`,
+  (m,cierra)=>{
+    m.querySelector('[data-no]').onclick=cierra;
+    m.querySelector('[data-si]').onclick=async()=>{
+      const a=m.querySelector('#mp-a').value,n=m.querySelector('#mp-n').value;
+      if(n.length<8)return toast('La nueva tiene que ser de al menos 8 caracteres.');
+      try{ const msg=await api.cambiarPassword(a,n);cierra();toast(msg); }
+      catch(err){ toast(err.message);falloSesion(err); }
+    };
+    m.querySelector('#mp-a').focus();
+  });
+}
+async function borraEvento(id){
+  const e=ev(id),d=agrega([e]);
+  if(!await confirmar('Eliminar evento',`Se va a borrar "${e.nom}" con sus ${e.gastos.length} gasto(s) por ${mx(d.gas)} y la recaudación de ${mx(d.total)}. El presupuesto se queda. No se puede deshacer.`))return;
+  if(selE===id)selE='todos';
+  await conAviso(()=>api.delEvento(id),'Evento eliminado.');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,160 @@
+{
+  "name": "tes/vigia",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "38b3391c-e1d8-4edd-8e2b-b1257e1e8322",
+      "name": "Cron 9:00 am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ultimo_respaldo() AS ultimo,\n       now() AS ahora,\n       (ultimo_respaldo() IS NULL OR ultimo_respaldo() < now() - INTERVAL '24 hours') AS hay_problema",
+        "options": {
+          "queryReplacement": "={{ [] }}",
+          "queryBatching": "single",
+          "largeNumbersOutput": "numbers"
+        }
+      },
+      "id": "481eaf20-89b4-4dfc-8301-e3d51e88ee81",
+      "name": "Postgres - Último respaldo",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        200,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REEMPLAZAR_CRED_APP_RW",
+          "name": "tesoreria-db · app_rw"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hay",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.hay_problema }}",
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "fd024a98-35df-46b4-858c-494f15839105",
+      "name": "¿Falta respaldo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "REEMPLAZAR@ejemplo.com",
+        "toEmail": "esteban.calderon.iea@gmail.com",
+        "subject": "⚠️ Tesorería Escolar: no hubo respaldo",
+        "emailFormat": "html",
+        "html": "=<p>El respaldo de las 3:00 am no dejó rastro en las últimas 24 horas.</p><p>Último respaldo registrado: <b>{{ $json.ultimo || 'ninguno' }}</b><br>Revisado: {{ $json.ahora }}</p><p>Revisa la ejecución del workflow <code>tes/respaldo</code> en n8n.</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "6ced54a8-4b16-462c-8e96-84885b5b8355",
+      "name": "Avisar",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        600,
+        0
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "REEMPLAZAR_CRED_SMTP",
+          "name": "tesoreria · correo"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cron 9:00 am": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Último respaldo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Último respaldo": {
+      "main": [
+        [
+          {
+            "node": "¿Falta respaldo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Falta respaldo?": {
+      "main": [
+        [
+          {
+            "node": "Avisar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Monterrey",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "meta": {
+    "descripcion": "Cron 9:00 am. Si no hubo respaldo en las ultimas 24 horas, avisa por correo. Lee la fecha con ultimo_respaldo(), la unica ventana de lectura a la bitacora que tiene app_rw."
+  },
+  "pinData": {}
+}
