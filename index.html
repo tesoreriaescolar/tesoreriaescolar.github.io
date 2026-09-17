@@ -91,6 +91,19 @@ td.money,th.money{text-align:right;font-variant-numeric:tabular-nums;font-weight
 .conc input.n{text-align:right;font-variant-numeric:tabular-nums}
 .conc input:disabled{border-bottom-color:transparent;color:var(--muted);opacity:1}
 .conc .head{color:var(--muted);font-size:11.5px}
+/* Un número que se toca para editarlo. Se ve igual que el campo que
+   reemplazó —misma raya punteada abajo— para que la pantalla no brinque
+   y para que siga leyéndose como algo editable. */
+.numbtn{font:inherit;background:transparent;color:var(--ink);border:0;border-bottom:1px dashed var(--line);padding:3px 2px;cursor:pointer;text-align:right;width:100%;font-variant-numeric:tabular-nums}
+.numbtn:disabled{border-bottom-color:transparent;color:var(--muted);cursor:default}
+.salon .numbtn{font-size:14px;font-weight:600;width:90px;flex:0 0 auto}
+.field .numbtn{font-size:14px;max-width:180px}
+.conc .numbtn{font-size:13.5px}
+/* La ruedita de "estoy guardando". Sin esto la pantalla se queda quieta
+   mientras viaja la petición y no hay forma de saber si ya. */
+.giro{display:inline-block;width:12px;height:12px;margin-right:7px;vertical-align:-1px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:giro .7s linear infinite}
+@keyframes giro{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.giro{animation-duration:2.4s}}
 .conc .del{border:0;background:transparent;color:var(--muted);font-size:17px;cursor:pointer;padding:0;line-height:1}
 .addrow{margin-top:10px;border:1px dashed var(--line);background:transparent;color:var(--muted);font:inherit;font-size:13px;padding:9px;width:100%;border-radius:9px;cursor:pointer}
 .result{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;padding:12px 0 0;border-top:2px solid var(--ink)}
@@ -178,7 +191,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:26px;line-
 </div>
 
 <script>
-const VERSION='V1.13';
+const VERSION='V1.14';
 
 /* =========================================================
    CAPA API — habla con n8n. Cada función es un fetch al
@@ -469,6 +482,13 @@ const eventoDe=id=>DB.eventos.find(e=>e.presId===id);
 
 /* ================= helpers ================= */
 const mx=n=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0}).format(n);
+/* Como mx(), pero sin esconder los centavos. Va SOLO en los números que
+   se tocan para editarlos: un precio unitario de 38.50 pintado como
+   "$39" justo donde se captura invita a corregir un dato que estaba
+   bien. En los totales del tablero se sigue usando mx(), a peso
+   redondo, que es como se lee un resumen. */
+const mxc=n=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',
+  minimumFractionDigits:Number.isInteger(+n)?0:2,maximumFractionDigits:2}).format(n);
 const fch=s=>new Date(s+'T12:00:00').toLocaleDateString('es-MX',{day:'numeric',month:'short'});
 const fchHora=ts=>new Date(ts).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
 const esc=s=>String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -552,6 +572,63 @@ function modal(html,setup){
   document.addEventListener('keydown',tecla);
   document.body.appendChild(m);setup(m,cierra);return m;
 }
+/* Apaga un botón y dice qué está pasando mientras viaja la petición.
+   Devuelve la función que lo revive, con el texto que TENÍA — no uno
+   inventado, que es como un botón acaba mintiendo después de un fallo. */
+function ocupa(boton,texto,otros){
+  const antes=boton.innerHTML;
+  const todos=[boton].concat(otros||[]).filter(Boolean);
+  todos.forEach(b=>b.disabled=true);
+  boton.innerHTML=`<span class="giro" aria-hidden="true"></span>${esc(texto)}`;
+  return ()=>{todos.forEach(b=>b.disabled=false);boton.innerHTML=antes};
+}
+
+/* ===== editar UN número, en su propio cuadro =====
+
+   Antes estos números eran campos que guardaban solos al salir de ellos.
+   Se sentía flojo por dos motivos: nadie decide cuándo guarda —basta
+   rozar el campo— y mientras viaja la petición la pantalla se queda
+   igualita, sin decir nada, hasta que de golpe se redibuja.
+
+   Aquí el número es un botón, el cuadro tiene su propio Guardar, y
+   mientras se guarda el botón gira y nada se puede tocar dos veces.
+   El cuadro NO se cierra si falla: se queda con el número escrito y el
+   motivo, para no perder lo tecleado.
+
+   o = {titulo, contexto, etiqueta, valor, entero, moneda, guarda, ok} */
+function editaNumero(o){
+  const val=o.valor==null?0:o.valor;
+  modal(`<h3>${esc(o.titulo)}</h3>${o.contexto?`<p>${esc(o.contexto)}</p>`:''}
+    <div class="inp" style="margin-top:14px"><label for="en-v">${esc(o.etiqueta||o.titulo)}</label>
+      <input id="en-v" type="number" min="0" step="${o.entero?'1':'0.01'}"
+             inputmode="${o.entero?'numeric':'decimal'}" value="${val}"></div>
+    <p class="hint" id="en-err" hidden></p>
+    <div class="actions"><button class="btn ghost" data-no>Cancelar</button>
+      <button class="btn" data-si>Guardar</button></div>`,
+  (m,cierra)=>{
+    const inp=m.querySelector('#en-v'),si=m.querySelector('[data-si]'),
+          no=m.querySelector('[data-no]'),err=m.querySelector('#en-err');
+    no.onclick=cierra;
+    const guarda=async()=>{
+      const v=Number(inp.value);
+      if(!isFinite(v)||v<0){
+        err.textContent='Escribe un número de cero para arriba.';err.hidden=false;inp.focus();return;
+      }
+      err.hidden=true;
+      const revive=ocupa(si,'Guardando…',[no,inp]);
+      try{
+        await o.guarda(o.entero?Math.round(v):v);
+        cierra();draw();toast(o.ok||'Listo.');
+      }catch(e){
+        revive();err.textContent=e.message;err.hidden=false;falloSesion(e);
+      }
+    };
+    si.onclick=guarda;
+    inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();guarda()}};
+    inp.focus();inp.select();
+  });
+}
+
 function confirmar(titulo,texto,accion='Eliminar'){
   return new Promise(res=>{
     modal(`<h3>${esc(titulo)}</h3><p>${esc(texto)}</p>
@@ -726,10 +803,10 @@ function vistaTes(){
   <div class="card">${filas.map(s=>{const v=d.rec[s.id],w=d.total>0?v/d.total*100:0;
     return `<div class="salon"><div class="tag" style="color:${s.color}">${s.nom}<div class="who">${s.reps}</div></div>
       <div class="track"><i style="width:${w}%;background:${s.color}"></i></div>
-      ${editable?`<input type="number" min="0" value="${v}" aria-label="Recaudado ${s.nom}"
-        onchange="api.setRecaudado('${uno.id}','${s.id}',+this.value||0).then(()=>{draw();toast('Recaudación actualizada.')})">`
+      ${editable?`<button class="numbtn" onclick="pideRecaudado('${uno.id}','${s.id}',${v})"
+        aria-label="Recaudado de ${s.nom}: ${mxc(v)}. Tócalo para cambiarlo">${mxc(v)}</button>`
       :`<div class="amt">${mx(v)}</div>`}</div>`}).join('')}
-    ${editable?`<p class="hint">Escribe el total que te reportó cada salón.</p>`:''}</div>
+    ${editable?`<p class="hint">Toca el monto de cada salón para capturar lo que te reportaron.</p>`:''}</div>
   ${uno?`<h2>Personas confirmadas por salón</h2>
   <div class="card">${filas.map(s=>{const o=d.per[s.id],v=sumaPers(o);
     return `<div class="salon"><div class="tag" style="color:${s.color}">${s.nom}</div>
@@ -870,6 +947,32 @@ function verTicket(eId,gId){
   });
 }
 
+/* Las tres puertas al cuadro de un número. Van aquí y no en el onclick
+   porque el valor de ahora se vuelve a leer de DB al abrir: si alguien
+   más lo movió mientras la pantalla estaba pintada, se edita sobre lo
+   último, no sobre lo que se dibujó. */
+function pideRecaudado(eId,gId,v){
+  editaNumero({
+    titulo:'Dinero recaudado', contexto:nomSalon(gId)+' · '+(ev(eId)||{}).nom,
+    etiqueta:'Total que reportó el salón', valor:v,
+    guarda:n=>api.setRecaudado(eId,gId,n), ok:'Recaudación actualizada.'});
+}
+function pidePres(campo,rotulo){
+  const P=pres(preId); if(!P)return;
+  editaNumero({
+    titulo:rotulo, contexto:P.nom, etiqueta:'Cuántos', entero:true, valor:P[campo]||0,
+    guarda:n=>api.setPres(preId,{[campo]:n}), ok:'Presupuesto actualizado.'});
+}
+function pideConcepto(i,campo){
+  const P=pres(preId); if(!P)return;
+  const k=P.c[i]; if(!k)return;
+  const cant=campo==='q';
+  editaNumero({
+    titulo:cant?'Cantidad':'Precio unitario', contexto:k.d||'Concepto sin nombre',
+    etiqueta:cant?'Cuántos':'Precio por unidad', entero:cant, valor:cant?k.q:k.u,
+    guarda:n=>api.setConcepto(preId,i,campo,n), ok:'Concepto actualizado.'});
+}
+
 function editaPersonas(eId){
   const e=ev(eId),filas=salonesDe(e);
   modal(`<h3>Personas confirmadas</h3><p>${esc(e.nom)}. Estos números son los de la realidad, no los del presupuesto, y los puedes mover cuando cambien.</p>
@@ -877,17 +980,30 @@ function editaPersonas(eId){
       <div class="field"><label>Adultos</label><input type="number" min="0" id="pp-${s.id}-ad" value="${(e.pers[s.id]||{}).ad||0}"></div>
       <div class="field"><label>Niños</label><input type="number" min="0" id="pp-${s.id}-ni" value="${(e.pers[s.id]||{}).ni||0}"></div>
       <div class="field"><label>Niñas</label><input type="number" min="0" id="pp-${s.id}-na" value="${(e.pers[s.id]||{}).na||0}"></div>`).join('')}
+    <p class="hint" id="pp-err" hidden></p>
     <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Guardar</button></div>`,
   (m,cierra)=>{
-    m.querySelector('[data-no]').onclick=cierra;
-    m.querySelector('[data-si]').onclick=async()=>{
-      for(const s of filas){
-        await api.setPersonas(eId,s.id,{
-          ad:+m.querySelector(`#pp-${s.id}-ad`).value||0,
-          ni:+m.querySelector(`#pp-${s.id}-ni`).value||0,
-          na:+m.querySelector(`#pp-${s.id}-na`).value||0});
+    const si=m.querySelector('[data-si]'),no=m.querySelector('[data-no]'),
+          err=m.querySelector('#pp-err');
+    no.onclick=cierra;
+    si.onclick=async()=>{
+      /* Un salón por petición, así que mientras se guarda hay que decir
+         algo: son varias idas al servidor, no una. Y si una falla, el
+         cuadro se queda abierto con lo tecleado — antes no había catch y
+         el error se perdía sin que nadie viera nada. */
+      err.hidden=true;
+      const revive=ocupa(si,'Guardando…',[no]);
+      try{
+        for(const s of filas){
+          await api.setPersonas(eId,s.id,{
+            ad:+m.querySelector(`#pp-${s.id}-ad`).value||0,
+            ni:+m.querySelector(`#pp-${s.id}-ni`).value||0,
+            na:+m.querySelector(`#pp-${s.id}-na`).value||0});
+        }
+        cierra();draw();toast('Personas actualizadas.');
+      }catch(e){
+        revive();err.textContent=e.message;err.hidden=false;falloSesion(e);
       }
-      cierra();draw();toast('Personas actualizadas.');
     };
   });
 }
@@ -1013,11 +1129,11 @@ function detallePre(){
     <div class="field"><label>Quién lo llena</label>
       <input value="${esc(P.rep)}" ${dis} oninput="api.setPres(preId,{rep:this.value})"></div>
     <div class="field"><label>Niños que asisten</label>
-      <input type="number" min="0" value="${P.ninos||0}" ${dis} onchange="api.setPres(preId,{ninos:+this.value||0}).then(draw)"></div>
+      <button class="numbtn" ${dis} onclick="pidePres('ninos','Niños que asisten')">${P.ninos||0}</button></div>
     <div class="field"><label>Niñas que asisten</label>
-      <input type="number" min="0" value="${P.ninas||0}" ${dis} onchange="api.setPres(preId,{ninas:+this.value||0}).then(draw)"></div>
+      <button class="numbtn" ${dis} onclick="pidePres('ninas','Niñas que asisten')">${P.ninas||0}</button></div>
     <div class="field"><label>Adultos</label>
-      <input type="number" min="0" value="${P.adultos||0}" ${dis} onchange="api.setPres(preId,{adultos:+this.value||0}).then(draw)"></div>
+      <button class="numbtn" ${dis} onclick="pidePres('adultos','Adultos')">${P.adultos||0}</button></div>
     <div class="field"><label>Personas en total</label><input value="${totPersonas(P)}" disabled></div>
   </div>
   <h2>Cuenta donde se deposita</h2>
@@ -1036,8 +1152,8 @@ function detallePre(){
     <div class="conc"><span class="head">Concepto</span><span class="head" style="text-align:right">Cant.</span><span class="head" style="text-align:right">P. unit.</span><span></span></div>
     ${P.c.length?P.c.map((k,i)=>`<div class="conc">
       <input value="${esc(k.d)}" ${dis} oninput="api.setConcepto(preId,${i},'d',this.value)" aria-label="Concepto">
-      <input class="n" type="number" min="0" value="${k.q}" ${dis} onchange="api.setConcepto(preId,${i},'q',+this.value||0).then(draw)" aria-label="Cantidad">
-      <input class="n" type="number" min="0" value="${k.u}" ${dis} onchange="api.setConcepto(preId,${i},'u',+this.value||0).then(draw)" aria-label="Precio unitario">
+      <button class="numbtn" ${dis} onclick="pideConcepto(${i},'q')" aria-label="Cantidad de ${esc(k.d)||'este concepto'}: ${k.q}. Tócala para cambiarla">${k.q}</button>
+      <button class="numbtn" ${dis} onclick="pideConcepto(${i},'u')" aria-label="Precio unitario de ${esc(k.d)||'este concepto'}: ${mxc(k.u)}. Tócalo para cambiarlo">${mxc(k.u)}</button>
       ${puede?`<button class="del" onclick="quitaConcepto(${i})" aria-label="Quitar">×</button>`:'<span></span>'}
     </div>`).join(''):`<div class="empty">Sin conceptos todavía.</div>`}
     ${puede?`<button class="addrow" onclick="api.addConcepto(preId).then(draw)">Agregar concepto</button>`:''}
