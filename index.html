@@ -104,7 +104,11 @@ td.money,th.money{text-align:right;font-variant-numeric:tabular-nums;font-weight
 .giro{display:inline-block;width:12px;height:12px;margin-right:7px;vertical-align:-1px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:giro .7s linear infinite}
 @keyframes giro{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.giro{animation-duration:2.4s}}
-.conc .del{border:0;background:transparent;color:var(--muted);font-size:17px;cursor:pointer;padding:0;line-height:1}
+.del{border:0;background:transparent;color:var(--muted);font-size:17px;cursor:pointer;padding:0 4px;line-height:1}
+.del:hover,.del:focus-visible{color:var(--neg)}
+.del:disabled{opacity:.5;cursor:default}
+.conc .del{padding:0}
+td .del{font-size:19px}
 .addrow{margin-top:10px;border:1px dashed var(--line);background:transparent;color:var(--muted);font:inherit;font-size:13px;padding:9px;width:100%;border-radius:9px;cursor:pointer}
 .result{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;padding:12px 0 0;border-top:2px solid var(--ink)}
 .result .v{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
@@ -205,7 +209,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:26px;line-
 </div>
 
 <script>
-const VERSION='V1.16';
+const VERSION='V1.17';
 
 /* =========================================================
    CAPA API — habla con n8n. Cada función es un fetch al
@@ -382,10 +386,14 @@ const api={
     await refresca();
   },
 
+  /* Devuelve la respuesta, no nada: trae `repetido` cuando el servidor
+     encontró un gemelo recién capturado y NO insertó otro, y la pantalla
+     lo dice en vez de fingir que registró algo. */
   async addGasto(e,g){
-    await pide('tesoreria','gasto_crear',
+    const j=await pide('tesoreria','gasto_crear',
       {evento_id:e,fecha:g.f,descripcion:g.d,proveedor:g.p,monto:g.m});
     await refresca();
+    return j;
   },
   async delGasto(e,id){ await pide('tesoreria','gasto_eliminar',{evento_id:e,gasto_id:id}); await refresca(); },
   async delEvento(id){ await pide('tesoreria','evento_eliminar',{evento_id:id}); await refresca(); },
@@ -654,6 +662,78 @@ function confirmar(titulo,texto,accion='Eliminar'){
   });
 }
 
+/* Un renglón para el motivo, DENTRO del cuadro. Se crea solo si no
+   estaba: así ningún cuadro tuvo que cambiar su plantilla para ganar
+   manejo de errores. Va antes de los botones, que es donde se mira. */
+function cajaError(m){
+  let e=m.querySelector('[data-err]');
+  if(!e){
+    e=document.createElement('p');e.className='hint';e.setAttribute('data-err','');e.hidden=true;
+    const acc=m.querySelector('.actions');
+    if(acc)acc.parentNode.insertBefore(e,acc); else m.querySelector('.box').appendChild(e);
+  }
+  return e;
+}
+
+/* ===== el botón de un cuadro que ESCRIBE =====
+
+   Todos los cuadros hacían lo mismo y estaba mal de la misma forma:
+   cerrar el cuadro y DESPUÉS mandar la petición. Durante el viaje la
+   pantalla se ve exactamente igual que antes —nada girando, nada
+   deshabilitado, el renglón todavía ahí— y eso es una invitación a
+   picarle otra vez. Así se duplicó el gasto 7 el 17-sep: dos toques con
+   1.482 segundos de diferencia.
+
+   Aquí el cuadro se queda abierto hasta que el servidor conteste. Si
+   falla, no se cierra: se queda con lo tecleado y el motivo debajo.
+
+   o = {valida, tarea, ok, enCurso, luego} */
+function alGuardar(m,cierra,o){
+  const si=m.querySelector('[data-si]'),no=m.querySelector('[data-no]'),err=cajaError(m);
+  if(no)no.onclick=cierra;
+  si.onclick=async()=>{
+    err.hidden=true;
+    const falla=o.valida?o.valida():null;
+    if(falla){err.textContent=falla;err.hidden=false;return}
+    const revive=ocupa(si,o.enCurso||'Guardando…',[no]);
+    try{
+      const r=await o.tarea();
+      cierra();
+      if(o.luego)o.luego(r); else draw();
+      if(o.ok)toast(typeof o.ok==='function'?o.ok(r):o.ok);
+    }catch(e){
+      revive();err.textContent=e.message;err.hidden=false;falloSesion(e);
+    }
+  };
+}
+
+/* Confirmar algo que BORRA. Igual que alGuardar, pero con el texto y el
+   botón rojo de confirmar(). La diferencia con confirmar() es justo la
+   que faltaba: aquel cierra el cuadro al decir que sí y solo entonces
+   manda la petición, así que un borrado viajaba sin que nada en la
+   pantalla lo dijera. */
+/* Escribir desde un botón que NO abre cuadro. El indicador va en el
+   botón mismo, que llega por `this` desde el onclick. Estos tres
+   —Confirmar, Devolver, Agregar concepto— no tenían ni indicador ni
+   catch: un fallo era una promesa rechazada que nadie veía. */
+async function enBoton(b,texto,tarea,ok){
+  if(b&&b.disabled)return;
+  const revive=b?ocupa(b,texto):()=>{};
+  try{ const r=await tarea(); revive(); draw(); if(ok)toast(typeof ok==='function'?ok(r):ok); }
+  catch(e){ revive(); toast(e.message); falloSesion(e); }
+}
+
+function confirmarYHacer(o){
+  modal(`<h3>${esc(o.titulo)}</h3><p>${esc(o.texto)}</p>
+    <p class="hint" data-err hidden></p>
+    <div class="actions"><button class="btn ghost" data-no>Cancelar</button>
+      <button class="btn danger" data-si>${esc(o.accion||'Eliminar')}</button></div>`,
+  (m,cierra)=>{
+    alGuardar(m,cierra,{tarea:o.tarea,ok:o.ok,enCurso:o.enCurso||'Eliminando…',luego:o.luego});
+    m.querySelector('[data-no]').focus();
+  });
+}
+
 /* ================= sesión ================= */
 const OJO_ON=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`;
 const OJO_OFF=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><line x1="3" y1="21" x2="21" y2="3"/></svg>`;
@@ -774,6 +854,9 @@ function vistaTes(){
   const filas=uno?salonesDe(uno):SALONES;
   const cta=uno?presDeEvento(uno):null;
   const editable=uno&&esTesorera(uno);
+  /* La x de cada gasto se ofrece a quien puede llegar a poder; el
+     servidor decide evento por evento. Ver borraGasto(). */
+  const borrable=puedeIntentarBorrarGasto();
   const maxP=Math.max(1,...filas.map(s=>sumaPers(d.per[s.id])));
   return `
   <div class="chips">${items.map(e=>`<button class="chip" aria-pressed="${selE===e.id}" onclick="selE='${e.id}';draw()">${esc(e.nom)}${e.tipo==='salon'?' · '+nomSalon(e.salon):''}</button>`).join('')}</div>
@@ -829,12 +912,13 @@ function vistaTes(){
     <p class="hint">${editable?'Toca la tarjeta de Personas confirmadas para cambiar estos números.':'Cada salón le reporta cuántos van y cuánto juntaron.'}</p></div>`:''}
   <h2>${uno?'Gastos realizados':'Gastos de todos los eventos'}</h2>
   <div class="card">
-    <table><thead><tr><th>Concepto</th><th class="money">Monto</th></tr></thead><tbody>
+    <table><thead><tr><th>Concepto</th><th class="money">Monto</th>${borrable?'<th></th>':''}</tr></thead><tbody>
     ${d.gastos.length?d.gastos.map(g=>`<tr><td><div class="desc">${esc(g.d)}</div>
       <div class="meta">${esc(g.p)} · ${fch(g.f)}${uno?'':' · '+esc(g.ev)}</div>
       <button class="tick${g.ticket?'':' falta'}" onclick="verTicket('${g.evId}','${g.id}')">${g.ticket?'Ver ticket':'Sin ticket'}</button></td>
-      <td class="money">${mx(g.m)}</td></tr>`).join('')
-      :`<tr><td colspan="2"><div class="empty">Sin gastos capturados.</div></td></tr>`}
+      <td class="money">${mx(g.m)}</td>
+      ${borrable?`<td><button class="del" onclick="borraGasto('${g.evId}','${g.id}')" aria-label="Eliminar el gasto ${esc(g.d)}">×</button></td>`:''}</tr>`).join('')
+      :`<tr><td colspan="${borrable?3:2}"><div class="empty">Sin gastos capturados.</div></td></tr>`}
     </tbody></table>
     <div class="tfoot"><span>Total gastado</span><span class="v num">${mx(d.gas)}</span></div>
     ${uno&&esTesorera(uno)?`<div class="actions"><button class="btn" onclick="nuevoGasto('${uno.id}')">Agregar gasto</button></div>`:''}
@@ -1031,13 +1115,18 @@ function nuevoGasto(eId){
     <div class="inp"><label for="gx-f">Fecha del pago</label><input id="gx-f" type="date" value="${hoy}"></div>
     <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Agregar</button></div>`,
   (m,cierra)=>{
-    m.querySelector('[data-no]').onclick=cierra;
-    m.querySelector('[data-si]').onclick=async()=>{
-      const d=m.querySelector('#gx-d').value.trim(),p=m.querySelector('#gx-p').value.trim(),
-            mo=+m.querySelector('#gx-m').value||0,f=m.querySelector('#gx-f').value;
-      if(!d||mo<=0)return toast('Falta la descripción o el monto.');
-      await api.addGasto(eId,{f,d,p:p||'Sin proveedor',m:mo});cierra();draw();toast('Gasto registrado.');
-    };
+    const val=()=>({d:m.querySelector('#gx-d').value.trim(),
+                    p:m.querySelector('#gx-p').value.trim(),
+                    mo:+m.querySelector('#gx-m').value||0,
+                    f:m.querySelector('#gx-f').value});
+    alGuardar(m,cierra,{
+      enCurso:'Agregando…',
+      valida:()=>{const v=val(); if(!v.d)return 'Falta la descripción.'; if(v.mo<=0)return 'El monto tiene que ser mayor que cero.';},
+      tarea:()=>{const v=val(); return api.addGasto(eId,{f:v.f,d:v.d,p:v.p||'Sin proveedor',m:v.mo})},
+      /* El servidor avisa cuando encontró un gemelo recién capturado y
+         NO insertó otro. Decirlo es más honesto que un "registrado" que
+         esconde que no se registró nada. */
+      ok:r=>r&&r.repetido?'Ese gasto ya se había registrado hace unos segundos. No se duplicó.':'Gasto registrado.'});
     m.querySelector('#gx-d').focus();
   });
 }
@@ -1118,8 +1207,8 @@ function detallePre(){
   let botones='';
   const acc=[];
   if(puedeConfirmar(P))acc.push(conf
-    ?`<button class="btn ghost" onclick="devolverP()">Devolver para editar</button>`
-    :`<button class="btn" onclick="confirmarP()">Confirmar y crear el evento</button>`);
+    ?`<button class="btn ghost" onclick="devolverP(this)">Devolver para editar</button>`
+    :`<button class="btn" onclick="confirmarP(this)">Confirmar y crear el evento</button>`);
   if(dueno&&!conf)acc.push(`<button class="btn ghost" onclick="abrePrestamo()">${prest?'Cambiar préstamo':'Prestar para que me ayuden'}</button>`);
   if(admin)acc.push(`<button class="btn ghost" onclick="borraPres()">Eliminar</button>`);
   if(acc.length)botones=`<div class="actions">${acc.join('')}</div>`;
@@ -1171,7 +1260,7 @@ function detallePre(){
       <button class="numbtn" ${dis} onclick="pideConcepto(${i},'u')" aria-label="Precio unitario de ${esc(k.d)||'este concepto'}: ${mxc(k.u)}. Tócalo para cambiarlo">${mxc(k.u)}</button>
       ${puede?`<button class="del" onclick="quitaConcepto(${i})" aria-label="Quitar">×</button>`:'<span></span>'}
     </div>`).join(''):`<div class="empty">Sin conceptos todavía.</div>`}
-    ${puede?`<button class="addrow" onclick="api.addConcepto(preId).then(draw)">Agregar concepto</button>`:''}
+    ${puede?`<button class="addrow" onclick="agregaConcepto(this)">Agregar concepto</button>`:''}
     <div class="result"><span>Dinero que se necesita</span><span class="v">${mx(total)}</span></div>
     <div class="result" style="border-top:1px solid var(--line)"><span>Cuota sugerida por niño</span><span class="v">${kids>0?mx(cuota):'—'}</span></div>
     ${aviso}${botones}
@@ -1240,14 +1329,17 @@ function nuevoPres(){
     ${admin?`<div class="inp"><label for="np-s">Salón que lo lleva</label><select id="np-s">${SALONES.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('')}</select></div>`:''}
     <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Crear</button></div>`,
   (m,cierra)=>{
-    m.querySelector('[data-no]').onclick=cierra;
-    m.querySelector('[data-si]').onclick=async()=>{
-      const n=m.querySelector('#np-n').value.trim(),f=m.querySelector('#np-f').value,t=m.querySelector('#np-t').value;
-      if(!n)return toast('Ponle nombre al evento.');
-      const salon=admin?m.querySelector('#np-s').value:ses.salon;
-      const id=await api.crearPres(n,f,salon,t);cierra();abrePre(id);
-      toast(t==='salon'?'Presupuesto de salón creado. Tú llevas su tesorería.':'Presupuesto creado. Caro lo confirma.');
-    };
+    alGuardar(m,cierra,{
+      enCurso:'Creando…',
+      valida:()=>{ if(!m.querySelector('#np-n').value.trim())return 'Ponle nombre al evento.'; },
+      tarea:()=>api.crearPres(m.querySelector('#np-n').value.trim(),
+                              m.querySelector('#np-f').value,
+                              admin?m.querySelector('#np-s').value:ses.salon,
+                              m.querySelector('#np-t').value),
+      luego:id=>abrePre(id),
+      ok:()=>m.querySelector('#np-t').value==='salon'
+        ?'Presupuesto de salón creado. Tú llevas su tesorería.'
+        :'Presupuesto creado. Caro lo confirma.'});
     m.querySelector('#np-n').focus();
   });
 }
@@ -1260,35 +1352,54 @@ function abrePrestamo(){
       <select id="pr-d"><option value="1">1 día</option><option value="3">3 días</option></select></div>
     <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Prestar</button></div>`,
   (m,cierra)=>{
-    m.querySelector('[data-no]').onclick=cierra;
-    m.querySelector('[data-si]').onclick=async()=>{
-      const s=m.querySelector('#pr-s').value,d=+m.querySelector('#pr-d').value;
-      await api.prestar(preId,s,d);cierra();draw();
-      toast(`Prestado a ${nomSalon(s)} hasta el ${fchHora(pres(preId).prestamo.hasta)}.`);
-    };
+    alGuardar(m,cierra,{
+      enCurso:'Prestando…',
+      tarea:()=>api.prestar(preId,m.querySelector('#pr-s').value,+m.querySelector('#pr-d').value),
+      ok:()=>{const s=m.querySelector('#pr-s').value;
+              return `Prestado a ${nomSalon(s)} hasta el ${fchHora(pres(preId).prestamo.hasta)}.`}});
   });
 }
-async function terminaPrestamo(){
+function terminaPrestamo(){
   const P=pres(preId);
-  if(!await confirmar('Terminar el préstamo',`${nomSalon(P.prestamo.a)} va a dejar de poder editar este presupuesto ahora mismo.`,'Terminar'))return;
-  await api.quitarPrestamo(preId);draw();toast('Préstamo terminado.');
+  confirmarYHacer({titulo:'Terminar el préstamo',
+    texto:`${nomSalon(P.prestamo.a)} va a dejar de poder editar este presupuesto ahora mismo.`,
+    accion:'Terminar', enCurso:'Terminando…',
+    tarea:()=>api.quitarPrestamo(preId), ok:'Préstamo terminado.'});
 }
-async function quitaConcepto(i){
+/* Agregar concepto escribía DIRECTO desde el onclick: sin botón que
+   deshabilitar y sin catch. Y el renglón nuevo se empuja al arreglo
+   LOCAL antes de mandarlo, así que dos toques metían dos renglones en
+   blanco sin que el servidor tuviera nada que hacer al respecto — el
+   duplicado nacía aquí. */
+function agregaConcepto(b){
+  return enBoton(b,'Agregando…',()=>api.addConcepto(preId));
+}
+
+function quitaConcepto(i){
   const k=pres(preId).c[i],nom=k.d?`"${k.d}"`:'este renglón sin nombre';
-  if(!await confirmar('Quitar concepto',`Se va a quitar ${nom} por ${mx((k.q||0)*(k.u||0))}. El total baja de inmediato.`,'Quitar'))return;
-  await api.delConcepto(preId,i);draw();toast('Concepto quitado.');
+  confirmarYHacer({titulo:'Quitar concepto',
+    texto:`Se va a quitar ${nom} por ${mx((k.q||0)*(k.u||0))}. El total baja de inmediato.`,
+    accion:'Quitar', enCurso:'Quitando…',
+    tarea:()=>api.delConcepto(preId,i), ok:'Concepto quitado.'});
 }
-async function confirmarP(){
+function confirmarP(b){
   const P=pres(preId);
   if(totPres(P)<=0)return toast('No se puede confirmar un presupuesto en ceros.');
-  await api.confirmar(preId);draw();toast('Confirmado. El evento ya está en el tablero.');
+  return enBoton(b,'Confirmando…',()=>api.confirmar(preId),'Confirmado. El evento ya está en el tablero.');
 }
-async function devolverP(){await api.devolver(preId);draw();toast('Devuelto a '+nomSalon(pres(preId).salon)+'.')}
-async function borraPres(){
+function devolverP(b){
+  // El nombre del salón se lee ANTES: después de devolver, refresca()
+  // ya cambió lo que hay en DB y el aviso hablaría de otra cosa.
+  const aQuien=nomSalon(pres(preId).salon);
+  return enBoton(b,'Devolviendo…',()=>api.devolver(preId),'Devuelto a '+aQuien+'.');
+}
+function borraPres(){
   const P=pres(preId),e=eventoDe(preId);
   const extra=e?` Ojo: ya tiene evento creado con ${e.gastos.length} gasto(s). El evento se queda, pero pierde su presupuesto.`:'';
-  if(!await confirmar('Eliminar presupuesto',`Se va a borrar "${P.nom}" por ${mx(totPres(P))}.${extra} No se puede deshacer.`))return;
-  await api.delPres(preId);preView='lista';draw();toast('Presupuesto eliminado.');
+  confirmarYHacer({titulo:'Eliminar presupuesto',
+    texto:`Se va a borrar "${P.nom}" por ${mx(totPres(P))}.${extra} No se puede deshacer.`,
+    tarea:()=>api.delPres(preId),
+    luego:()=>{preView='lista';draw()}, ok:'Presupuesto eliminado.'});
 }
 
 /* ================= configuración ================= */
@@ -1422,12 +1533,11 @@ function nuevaClave(id,usuario){
     <div class="inp"><label for="nc-p">Contraseña</label><input id="nc-p" type="text" autocomplete="off"></div>
     <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Guardar</button></div>`,
   (m,cierra)=>{
-    m.querySelector('[data-no]').onclick=cierra;
-    m.querySelector('[data-si]').onclick=async()=>{
-      const v=m.querySelector('#nc-p').value;
-      if(v.length<8)return toast('Tiene que ser de al menos 8 caracteres.');
-      cierra();await conAviso(()=>api.ponerClave(id,v),'Contraseña de '+usuario+' restablecida.');
-    };
+    alGuardar(m,cierra,{
+      enCurso:'Restableciendo…',
+      valida:()=>{ if(m.querySelector('#nc-p').value.length<8)return 'Tiene que ser de al menos 8 caracteres.'; },
+      tarea:()=>api.ponerClave(id,m.querySelector('#nc-p').value),
+      ok:'Contraseña de '+usuario+' restablecida.'});
     m.querySelector('#nc-p').focus();
   });
 }
@@ -1442,18 +1552,20 @@ function nuevaPersona(){
       ${SALONES.map(s=>`<option value="${s.id}">${esc(s.nom)}</option>`).join('')}</select></div>
     <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Dar de alta</button></div>`,
   (m,cierra)=>{
-    m.querySelector('[data-no]').onclick=cierra;
-    m.querySelector('[data-si]').onclick=async()=>{
-      const nom=m.querySelector('#np-nom').value.trim(),u=m.querySelector('#np-u').value.trim(),
-            p=m.querySelector('#np-p').value,rol=m.querySelector('#np-r').value,g=m.querySelector('#np-g').value;
-      if(!nom||!u)return toast('Falta el nombre o el usuario.');
-      if(p.length<8)return toast('La contraseña tiene que ser de al menos 8 caracteres.');
-      cierra();
-      await conAviso(()=>api.crearPersona({nombre:nom,usuario:u,clave:p,rol,
-        grupo_id:rol==='admin'?null:g,
-        permisos:{tickets:rol!=='mama',ver_presupuesto:true,ver_todos_los_grupos:rol==='admin'}}),
-        'Cuenta creada.');
-    };
+    const val=()=>({nom:m.querySelector('#np-nom').value.trim(),
+                    u:m.querySelector('#np-u').value.trim(),
+                    p:m.querySelector('#np-p').value,
+                    rol:m.querySelector('#np-r').value,
+                    g:m.querySelector('#np-g').value});
+    alGuardar(m,cierra,{
+      enCurso:'Dando de alta…',
+      valida:()=>{const v=val();
+        if(!v.nom||!v.u)return 'Falta el nombre o el usuario.';
+        if(v.p.length<8)return 'La contraseña tiene que ser de al menos 8 caracteres.';},
+      tarea:()=>{const v=val(); return api.crearPersona({nombre:v.nom,usuario:v.u,clave:v.p,rol:v.rol,
+        grupo_id:v.rol==='admin'?null:v.g,
+        permisos:{tickets:v.rol!=='mama',ver_presupuesto:true,ver_todos_los_grupos:v.rol==='admin'}})},
+      ok:'Cuenta creada.'});
     m.querySelector('#np-nom').focus();
   });
 }
@@ -1464,14 +1576,15 @@ function nuevoGrupo(){
     <div class="inp"><label for="ng-c">Color</label><input id="ng-c" type="color" value="#12806A"></div>
     <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Crear</button></div>`,
   (m,cierra)=>{
-    m.querySelector('[data-no]').onclick=cierra;
-    m.querySelector('[data-si]').onclick=async()=>{
-      const l=m.querySelector('#ng-l').value.trim(),n=m.querySelector('#ng-n').value.trim();
-      if(!l||!n)return toast('Falta la letra o el nombre.');
-      cierra();
-      await conAviso(()=>api.setGrupo('crear',{letra:l,nombre:n,color:m.querySelector('#ng-c').value,
-        orden:SALONES.length+1}),'Salón creado.');
-    };
+    alGuardar(m,cierra,{
+      enCurso:'Creando…',
+      valida:()=>{ if(!m.querySelector('#ng-l').value.trim()||!m.querySelector('#ng-n').value.trim())
+                     return 'Falta la letra o el nombre.'; },
+      tarea:()=>api.setGrupo('crear',{letra:m.querySelector('#ng-l').value.trim(),
+                                      nombre:m.querySelector('#ng-n').value.trim(),
+                                      color:m.querySelector('#ng-c').value,
+                                      orden:SALONES.length+1}),
+      ok:'Salón creado.'});
     m.querySelector('#ng-l').focus();
   });
 }
@@ -1482,9 +1595,10 @@ async function renombraGrupo(id,nombre){
 async function recoloraGrupo(id,color){
   await conAviso(()=>api.setGrupo('editar',{grupo_id:id,color}),'Color actualizado.');
 }
-async function borraGrupo(id,nom){
-  if(!await confirmar('Eliminar salón',`Se va a quitar "${nom}". Solo se puede si nadie está asignado a él y no tiene presupuestos ni eventos.`))return;
-  await conAviso(()=>api.setGrupo('eliminar',{grupo_id:id}),'Salón eliminado.');
+function borraGrupo(id,nom){
+  confirmarYHacer({titulo:'Eliminar salón',
+    texto:`Se va a quitar "${nom}". Solo se puede si nadie está asignado a él y no tiene presupuestos ni eventos.`,
+    tarea:()=>api.setGrupo('eliminar',{grupo_id:id}), ok:'Salón eliminado.'});
 }
 function nuevoCiclo(){
   modal(`<h3>Ciclo nuevo</h3><p>Nace vacío y sin activar. Para copiar salones y personas del ciclo actual, usa <b>Pasar de año</b>.</p>
@@ -1492,18 +1606,21 @@ function nuevoCiclo(){
     <div class="inp"><label for="nn-g">Grado</label><input id="nn-g" placeholder="PS4"></div>
     <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Crear</button></div>`,
   (m,cierra)=>{
-    m.querySelector('[data-no]').onclick=cierra;
-    m.querySelector('[data-si]').onclick=async()=>{
-      const n=m.querySelector('#nn-n').value.trim(),g=m.querySelector('#nn-g').value.trim();
-      if(!n||!g)return toast('Falta el nombre o el grado.');
-      cierra();await conAviso(()=>api.crearCiclo({nombre:n,grado:g}),'Ciclo creado.');
-    };
+    alGuardar(m,cierra,{
+      enCurso:'Creando…',
+      valida:()=>{ if(!m.querySelector('#nn-n').value.trim()||!m.querySelector('#nn-g').value.trim())
+                     return 'Falta el nombre o el grado.'; },
+      tarea:()=>api.crearCiclo({nombre:m.querySelector('#nn-n').value.trim(),
+                                grado:m.querySelector('#nn-g').value.trim()}),
+      ok:'Ciclo creado.'});
     m.querySelector('#nn-n').focus();
   });
 }
-async function activaCiclo(id,nom){
-  if(!await confirmar('Cambiar de ciclo',`Todos van a entrar al ciclo "${nom}". Lo de este año no se borra: se queda guardado. Solo se puede si ese ciclo ya tiene salones y una tesorera general.`,'Activar'))return;
-  await conAviso(()=>api.activarCiclo(id),'Ciclo activado.');
+function activaCiclo(id,nom){
+  confirmarYHacer({titulo:'Cambiar de ciclo',
+    texto:`Todos van a entrar al ciclo "${nom}". Lo de este año no se borra: se queda guardado. Solo se puede si ese ciclo ya tiene salones y una tesorera general.`,
+    accion:'Activar', enCurso:'Activando…',
+    tarea:()=>api.activarCiclo(id), ok:'Ciclo activado.'});
 }
 function pasarDeAno(){
   const c=DB.ciclo||{};
@@ -1514,16 +1631,19 @@ function pasarDeAno(){
     <p class="hint">Los nombres de los salones se renombran solos si empiezan con el grado: ${esc(c.grado||'PS3')}A pasa a ser (grado nuevo)A.</p>
     <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Pasar de año</button></div>`,
   (m,cierra)=>{
-    m.querySelector('[data-no]').onclick=cierra;
-    m.querySelector('[data-si]').onclick=async()=>{
-      const n=m.querySelector('#pa-n').value.trim(),g=m.querySelector('#pa-g').value.trim();
-      if(!n||!g)return toast('Falta el nombre o el grado.');
-      cierra();
-      await conAviso(async()=>{
-        const j=await api.pasarDeAno({nombre:n,grado:g});
-        toast('Listo: '+(j.grupos_copiados||0)+' salón(es) y '+(j.afectadas||0)+' persona(s) en el ciclo nuevo.');
-      });
-    };
+    /* El más lento de todos —crea ciclo, copia salones y pasa a todas
+       las personas— y por eso el que más invitaba a picarle dos veces.
+       Duplicar un año NO se podía: ciclos_nombre_uq lo impide en la base
+       y el propio SQL trae su NOT EXISTS por nombre. Lo que sí pasaba es
+       que el segundo toque devolvía un error confuso sobre algo que en
+       realidad había salido bien. */
+    alGuardar(m,cierra,{
+      enCurso:'Pasando de año…',
+      valida:()=>{ if(!m.querySelector('#pa-n').value.trim()||!m.querySelector('#pa-g').value.trim())
+                     return 'Falta el nombre o el grado.'; },
+      tarea:()=>api.pasarDeAno({nombre:m.querySelector('#pa-n').value.trim(),
+                                grado:m.querySelector('#pa-g').value.trim()}),
+      ok:j=>'Listo: '+((j&&j.grupos_copiados)||0)+' salón(es) y '+((j&&j.afectadas)||0)+' persona(s) en el ciclo nuevo.'});
     m.querySelector('#pa-n').focus();
   });
 }
@@ -1534,21 +1654,52 @@ function miPassword(){
     <p class="hint">Mínimo 8 caracteres.</p>
     <div class="actions"><button class="btn ghost" data-no>Cancelar</button><button class="btn" data-si>Guardar</button></div>`,
   (m,cierra)=>{
-    m.querySelector('[data-no]').onclick=cierra;
-    m.querySelector('[data-si]').onclick=async()=>{
-      const a=m.querySelector('#mp-a').value,n=m.querySelector('#mp-n').value;
-      if(n.length<8)return toast('La nueva tiene que ser de al menos 8 caracteres.');
-      try{ const msg=await api.cambiarPassword(a,n);cierra();toast(msg); }
-      catch(err){ toast(err.message);falloSesion(err); }
-    };
+    alGuardar(m,cierra,{
+      enCurso:'Cambiando…',
+      valida:()=>{ if(m.querySelector('#mp-n').value.length<8)
+                     return 'La nueva tiene que ser de al menos 8 caracteres.'; },
+      tarea:()=>api.cambiarPassword(m.querySelector('#mp-a').value,m.querySelector('#mp-n').value),
+      luego:()=>{},                  // cambiar la propia no repinta nada
+      ok:msg=>msg});
     m.querySelector('#mp-a').focus();
   });
 }
-async function borraEvento(id){
+function borraEvento(id){
   const e=ev(id),d=agrega([e]);
-  if(!await confirmar('Eliminar evento',`Se va a borrar "${e.nom}" con sus ${e.gastos.length} gasto(s) por ${mx(d.gas)} y la recaudación de ${mx(d.total)}. El presupuesto se queda. No se puede deshacer.`))return;
-  if(selE===id)selE='todos';
-  await conAviso(()=>api.delEvento(id),'Evento eliminado.');
+  confirmarYHacer({titulo:'Eliminar evento',
+    texto:`Se va a borrar "${e.nom}" con sus ${e.gastos.length} gasto(s) por ${mx(d.gas)} y la recaudación de ${mx(d.total)}. El presupuesto se queda. No se puede deshacer.`,
+    tarea:()=>api.delEvento(id),
+    luego:()=>{if(selE===id)selE='todos';draw()}, ok:'Evento eliminado.'});
+}
+
+/* Eliminar un gasto. El botón se ofrece a quien PUEDE llegar a poder
+   —tesorera general y representantes— y es el SERVIDOR el que decide
+   evento por evento: la regla vive en el WHERE de gasto_eliminar, no
+   aquí. A las mamás no se les ofrece porque para ellas no es "aquí no",
+   es "nunca"; enseñarles un botón que siempre falla es otra forma de
+   mentir. */
+const puedeIntentarBorrarGasto=()=>ses.rol==='admin'||ses.rol==='rep';
+
+function borraGasto(eId,gId){
+  const e=ev(eId),g=e&&e.gastos.find(x=>x.id===gId);
+  if(!g)return;
+  confirmarYHacer({titulo:'Eliminar gasto',
+    texto:`Se va a borrar "${g.d}" de ${g.p} por ${mx(g.m)}. El total del evento baja de inmediato y no se puede deshacer.`,
+    tarea:async()=>{
+      try{ await api.delGasto(eId,gId); }
+      catch(err){
+        /* El servidor contesta lo mismo para "no existe" y para "no es
+           tuyo", a propósito. Aquí se traduce a la REGLA, que es lo que
+           la persona necesita saber, sin afirmar cuál de los dos casos
+           fue. */
+        if(err&&err.message&&/NO_PERMITIDO|no se pudo guardar/i.test(err.message)){
+          const x=new Error('No se pudo. Los gastos de un evento de generación solo los elimina la tesorera general; los de un evento de salón, la representante de ese salón.');
+          x.clase='servidor';throw x;
+        }
+        throw err;
+      }
+    },
+    ok:'Gasto eliminado.'});
 }
 </script>
 </body>

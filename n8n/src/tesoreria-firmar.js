@@ -32,7 +32,8 @@ try {
     const fila = $input.first().json || {};
     const n = Number(fila.afectadas || 0);
     salida = n > 0
-      ? { ok: true, afectadas: n, id: fila.id === undefined ? null : String(fila.id) }
+      ? { ok: true, afectadas: n, id: fila.id === undefined ? null : String(fila.id),
+          repetido: fila.repetido === true }
       : { ok: false, error: 'NO_PERMITIDO_O_NO_EXISTE' };
   } else {
     const fila = $input.first().json;

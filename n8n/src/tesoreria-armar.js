@@ -97,16 +97,55 @@ switch (pet.accion) {
     break;
   }
 
+  /* VENTANA ANTI-REPETIDO.
+
+     El botón deshabilitado del navegador es cortesía, no garantía: no
+     cubre que la petición llegue, el servidor la procese y la red se
+     caiga antes de la respuesta —ahí la persona reintenta y son dos
+     renglones—, ni dos aparatos, ni una recarga a media petición.
+
+     Así que si ya hay un gasto IDÉNTICO en el mismo evento capturado
+     hace menos de 20 segundos, no se inserta otro: se devuelve el que ya
+     estaba, con `repetido` en true para que la pantalla lo diga.
+
+     ⚠️ Lo que esto NO es: un candado. Dos peticiones de verdad
+     simultáneas pueden no verse entre sí y colarse las dos. Cierra el
+     caso real medido —el gasto 7, dos toques con 1.482 s de diferencia—
+     no el teórico. El candado de verdad es una llave de envío con índice
+     único, y va cuando haya otra razón para migrar el esquema.
+
+     ⚠️ Y su costo, que es real: dos gastos idénticos LEGÍTIMOS dentro de
+     la ventana —dos taxis de $150 el mismo día, mismo proveedor— se
+     convierten en uno. Por eso 20 segundos y no cinco minutos, y por eso
+     la pantalla avisa en vez de callarse.
+
+     El gemelo se busca con el MISMO permiso que la inserción: sin eso,
+     preguntar por un gasto ajeno confirmaría que existe. */
   case 'gasto_crear':
     sql = `
-      WITH antes AS (SELECT NULL::jsonb AS j)
+      WITH gemelo AS (
+          SELECT g.id FROM gastos g
+           WHERE g.evento_id = $6::bigint
+             AND g.fecha_pago = $7::date
+             AND g.descripcion = $8::text
+             AND g.proveedor = COALESCE($9::text, '')
+             AND g.monto = $10::numeric
+             AND g.creado_en > now() - interval '20 seconds'
+             AND ${EVENTO_MIO}
+           ORDER BY g.id DESC LIMIT 1
+        )
+      , antes AS (SELECT NULL::jsonb AS j)
       , upd AS (
           INSERT INTO gastos (evento_id, fecha_pago, descripcion, proveedor, monto)
           SELECT $6::bigint, $7::date, $8::text, COALESCE($9::text, ''), $10::numeric
            WHERE ${EVENTO_MIO} AND $10::numeric > 0 AND btrim($8::text) <> ''
+             AND NOT EXISTS (SELECT 1 FROM gemelo)
           RETURNING id, to_jsonb(gastos.*) AS j
         )${LOG('gasto_crear', 'gastos')}
-      ${CIERRE}`;
+      SELECT (SELECT count(*) FROM upd) + (SELECT count(*) FROM gemelo) AS afectadas,
+             COALESCE((SELECT max(id) FROM upd), (SELECT id FROM gemelo)) AS id,
+             (SELECT count(*) FROM log) AS logs,
+             (SELECT count(*) FROM gemelo) > 0 AS repetido`;
     params = base.concat([d.evento_id, d.fecha || null, String(d.descripcion || ''),
                           String(d.proveedor || ''), num(d.monto)]);
     break;
