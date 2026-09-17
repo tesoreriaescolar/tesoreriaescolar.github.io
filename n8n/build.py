@@ -24,10 +24,10 @@ SRC  = os.path.join(AQUI, 'src')
 OUT  = os.path.join(AQUI, 'workflows')
 
 # Marcadores que se reemplazan a mano al importar en n8n.
-CRED_APP = {"id": "REEMPLAZAR_CRED_APP_RW",  "name": "tesoreria-db · app_rw"}
+CRED_APP = {"id": "REEMPLAZAR_CRED_APP_RW",  "name": "tesoreria-escolar-db · app_rw"}
 # Solo la usa tes/validar-token. Ver db/003_config.sql.
-CRED_CFG = {"id": "REEMPLAZAR_CRED_CONFIG_RO", "name": "tesoreria-db · config_ro"}
-CRED_SMTP= {"id": "REEMPLAZAR_CRED_SMTP",    "name": "tesoreria · correo"}
+CRED_CFG = {"id": "REEMPLAZAR_CRED_CONFIG_RO", "name": "tesoreria-escolar-db · config_ro"}
+CRED_SMTP= {"id": "REEMPLAZAR_CRED_SMTP",    "name": "tesoreria-escolar · correo"}
 ID_VALIDAR = "REEMPLAZAR_ID_VALIDAR_TOKEN"
 
 # El navegador solo puede llamar a estos webhooks desde el dominio de la
