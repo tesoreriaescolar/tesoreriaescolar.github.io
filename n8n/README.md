@@ -172,6 +172,22 @@ n8n descarta cosas al importar. Hay que rellenarlas:
    público y un correo personal es dato personal aunque no sea secreto.
 5. Los webhooks nacen con id nuevo: confirma que la ruta sea `tes/<lo que
    sea>` y no otra cosa.
+6. 🔴 **El `=` del campo `query` de los nodos Postgres.** Al importar, n8n
+   convirtió `"={{ $json.sql }}"` en `"{{ $json.sql }}"` —**sin el `=`**—
+   en los CINCO workflows de API. Sin ese `=` el valor deja de ser una
+   expresión: el nodo le manda a Postgres la cadena literal
+   `{{ $json.sql }}` y la consulta nunca corre.
+
+   Pasó el 17-sep-2026 al importar los ocho a mano. El repo los trae
+   bien; lo perdió la importación. Los nodos afectados son
+   `Postgres - Ejecutar` (lectura, presupuestos, tesorería, admin) y
+   `Postgres - Aplicar` (auth).
+
+   **Cómo se ve si vuelve a pasar:** el validador de n8n lo dice
+   (`MISSING_EXPRESSION_PREFIX`), y en la UI el campo aparece como texto
+   plano en vez de expresión. **Cómo se comprueba:** leer el workflow de
+   vuelta y confirmar que `query` empieza con `=`. No basta con mirar el
+   JSON del repo — el repo estaba bien.
 
 Y después de activar: **vuelve a leer el workflow** y confirma que
 `active` quedó en `true`. El éxito del guardado no lo prueba.
