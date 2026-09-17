@@ -205,7 +205,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:26px;line-
 </div>
 
 <script>
-const VERSION='V1.15';
+const VERSION='V1.16';
 
 /* =========================================================
    CAPA API — habla con n8n. Cada función es un fetch al
@@ -1157,8 +1157,9 @@ function detallePre(){
     <div class="field"><label>Nombre del titular</label>
       <input value="${esc(P.titular)}" ${dis} placeholder="A nombre de quién" onchange="api.setPres(preId,{titular:this.value}).then(draw)"></div>
     <div class="field"><label>CLABE</label>
-      <input value="${esc(P.clabe)}" ${dis} inputmode="numeric" maxlength="18" placeholder="18 dígitos" onchange="api.setPres(preId,{clabe:this.value.replace(/\\D/g,'')}).then(draw)"></div>
-    ${P.clabe&&P.clabe.length!==18?`<p class="hint">La CLABE lleva 18 dígitos. Ésta trae ${P.clabe.length}.</p>`:''}
+      <input id="pre-clabe" value="${esc(P.clabe)}" ${dis} inputmode="numeric" maxlength="18"
+             placeholder="18 dígitos" oninput="pintaClabe(this)" onchange="guardaClabe(this)"></div>
+    <p class="hint" id="pre-clabe-nota">${textoClabe(P.clabe,true)}</p>
     <p class="hint">Es la cuenta de este evento y sale en su tablero para que las mamás depositen.</p>
   </div>
   <h2>Conceptos que se van a pagar</h2>
@@ -1175,6 +1176,57 @@ function detallePre(){
     <div class="result" style="border-top:1px solid var(--line)"><span>Cuota sugerida por niño</span><span class="v">${kids>0?mx(cuota):'—'}</span></div>
     ${aviso}${botones}
   </div>`;
+}
+
+/* ===== la CLABE =====
+
+   La base exige 18 dígitos o nada (CHECK presupuestos_clabe_ok: «clabe =
+   '' OR clabe ~ '^[0-9]{18}$'»), y hace bien: una CLABE a medias no
+   sirve para recibir un peso, y peor si se parece a otra.
+
+   La pantalla, en cambio, mandaba lo que hubiera escrito en cuanto el
+   dedo salía del campo. Y TODA CLABE está a medias mientras se escribe.
+   Resultado medido el 17-sep-2026: cinco ejecuciones con error en
+   tes/presupuestos, todas iguales —
+
+     new row for relation "presupuestos" violates check constraint
+     "presupuestos_clabe_ok"
+     params[14] = "2319106"        ← siete dígitos
+
+   — y en pantalla un «No se pudo guardar el cambio» que no decía qué
+   estaba mal ni cuánto faltaba.
+
+   Las dos mitades ya decían lo mismo; lo que faltaba era que la de
+   arriba lo supiera ANTES de mandar. */
+
+const soloDigitos=v=>String(v==null?'':v).replace(/\D/g,'');
+
+function textoClabe(v,guardada){
+  const d=soloDigitos(v);
+  if(d==='')return 'Puedes dejarla vacía y capturarla después.';
+  if(d.length===18)return guardada?'Los 18 dígitos, guardada.':'Los 18 dígitos. Se guarda al salir del campo.';
+  return `Van ${d.length} de 18 dígitos. Se guarda cuando estén los 18.`;
+}
+
+function pintaClabe(campo){
+  const d=soloDigitos(campo.value);
+  if(campo.value!==d)campo.value=d;          // se cae lo que no sea número
+  const nota=document.getElementById('pre-clabe-nota');
+  if(nota)nota.textContent=textoClabe(d,false);
+}
+
+async function guardaClabe(campo){
+  const d=soloDigitos(campo.value);
+  campo.value=d;
+  const P=pres(preId);
+  if(P&&d===soloDigitos(P.clabe))return;                 // no cambió: no se manda
+  if(d!==''&&d.length!==18){
+    /* Ni se manda ni se pierde: lo tecleado se queda en pantalla y la
+       nota dice cuánto falta. Antes esto era un viaje al servidor que
+       terminaba en un error de base de datos. */
+    return toast(`La CLABE lleva 18 dígitos y van ${d.length}. Complétala y sal del campo.`);
+  }
+  await conAviso(()=>api.setPres(preId,{clabe:d}), d===''?'CLABE borrada.':'CLABE guardada.');
 }
 
 function nuevoPres(){
