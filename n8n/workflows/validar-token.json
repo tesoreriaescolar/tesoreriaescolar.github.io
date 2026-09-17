@@ -63,6 +63,7 @@
         400,
         0
       ],
+      "alwaysOutputData": true,
       "credentials": {
         "postgres": {
           "id": "REEMPLAZAR_CRED_APP_RW",
@@ -88,6 +89,7 @@
         600,
         0
       ],
+      "alwaysOutputData": true,
       "credentials": {
         "postgres": {
           "id": "REEMPLAZAR_CRED_CONFIG_RO",

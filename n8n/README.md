@@ -116,6 +116,37 @@ al importar y probar.
 en la UI reabre el hoyo sin que nada avise. El arreglo estructural es que
 el secreto no sea nunca la salida de un nodo.
 
+**6-bis. 🔴 Cero filas = cero items = el webhook cierra VACÍO.**
+Cuando una consulta devuelve **cero filas**, el nodo de Postgres emite
+**cero items**, y en n8n cero items significa que **todo lo que sigue se
+salta** — incluido el `Respond to Webhook`. El webhook entonces cierra con
+**200 y el cuerpo vacío**: sin error, sin nada que mirar, sin nada en el
+historial si el guardado está apagado.
+
+Y aquí eso no es un caso raro, **es el caso normal**: los cinco workflows
+de API usan una consulta centinela —`SELECT 0 AS afectadas WHERE false`—
+para los rechazos, y `tes/auth` la usa también en el **login bueno**,
+porque entrar no escribe nada. O sea que el camino feliz del login
+devolvía cero filas y la respuesta nunca se armaba.
+
+Por eso **todos** los nodos de Postgres llevan `alwaysOutputData: true`,
+puesto en `n_pg()` de `build.py` para que no dependa de acordarse. El nodo
+emite entonces un item vacío, la cadena sigue, y el Code de respuesta arma
+el JSON que toca — que ya sabe manejar el caso vacío, porque lee el
+veredicto de los nodos de arriba, no de `$json`.
+
+Es el mismo guardia que lleva `comercial/cotizacion` en su nodo
+`Postgres - Machote del actor`, y por la misma razón.
+
+Medido el 17-sep-2026: ejecución `101777` (login, se corta en
+`Postgres - Aplicar` con `main: [[]]`) y `101780` (el mismo login con la
+bandera puesta, responde `ok:true` con su token).
+
+⚠️ **Cómo se ve desde el navegador**, que es lo que confunde: `200 OK`,
+las cabeceras de CORS correctas, y la respuesta vacía. Parece un problema
+de CORS o de red, y no es ninguno de los dos: el workflow corrió y se
+quedó a medias.
+
 **7. Los permisos se EXIGEN, nunca se descartan.**
 `if (x && x.y !== true) rechaza` **no corre cuando `x` falta**. Se escribe
 al revés: sigue solo si el permiso vale exactamente `true`. Lo mismo con
