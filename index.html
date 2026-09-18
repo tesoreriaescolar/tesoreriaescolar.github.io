@@ -6,7 +6,11 @@
 <title>Tesorería Escolar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Las tipografias NO bloquean el pintado: media="print" hace que el navegador
+     las baje sin esperarlas, y al llegar se aplican. Si Google no contesta, la
+     aplicacion se ve igual con la tipografia del telefono. Nunca en blanco. -->
+<link rel="stylesheet" media="print" onload="this.media='all';this.onload=null"
+      href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Public+Sans:wght@400;500;600&display=swap">
 <style>
 :root{--paper:#EFF2F5;--card:#FFFFFF;--ink:#13202B;--muted:#5C6B78;--line:#DFE5EA;
 --a:#4C6EF5;--b:#E09B2D;--c:#CE4C7C;--pos:#12806A;--neg:#B8402F;--shade:#13202B;--radius:14px}
@@ -14,7 +18,7 @@
 *{box-sizing:border-box}html,body{margin:0;padding:0}
 [hidden]{display:none!important}
 body{background:var(--paper);color:var(--ink);font-family:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
-h1,h2,h3,.num{font-family:"Familjen Grotesk","Public Sans",sans-serif;font-variant-numeric:tabular-nums}
+h1,h2,h3,.num{font-family:"Familjen Grotesk","Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums}
 .wrap{max-width:760px;margin:0 auto;padding:18px 14px 56px}
 button:focus-visible,select:focus-visible,input:focus-visible,.pcard:focus-visible{outline:2px solid var(--a);outline-offset:2px}
 #login{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px}
@@ -62,8 +66,8 @@ header h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-0.015em}
 h2{font-size:14px;font-weight:600;margin:20px 0 9px;color:var(--muted)}
 .salon{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line)}
 .salon:last-child{border-bottom:0}
-.salon .tag{width:44px;font-weight:600;font-size:13.5px;flex:0 0 auto;font-family:"Familjen Grotesk",sans-serif}
-.salon .who{font-size:11.5px;color:var(--muted);margin-top:2px;font-family:"Public Sans",sans-serif;font-weight:400}
+.salon .tag{width:44px;font-weight:600;font-size:13.5px;flex:0 0 auto;font-family:"Familjen Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.salon .who{font-size:11.5px;color:var(--muted);margin-top:2px;font-family:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-weight:400}
 .salon .track{flex:1;height:7px;background:var(--line);border-radius:4px;overflow:hidden}
 .salon .track i{display:block;height:100%;border-radius:4px}
 .salon .amt{font-weight:600;font-size:14.5px;min-width:80px;text-align:right;font-variant-numeric:tabular-nums}
@@ -130,7 +134,7 @@ td .del{font-size:19px}
 .pcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;cursor:pointer}
 .pcard:hover{border-color:var(--muted)}
 .pcard-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-.pcard-nom{font-family:"Familjen Grotesk",sans-serif;font-weight:600;font-size:16px;letter-spacing:-0.01em}
+.pcard-nom{font-family:"Familjen Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-weight:600;font-size:16px;letter-spacing:-0.01em}
 /* Tarjeta de persona plegada. Es un <details> de verdad y no un div con
    una clase: así el teclado, el lector de pantalla y el buscador del
    navegador ya saben qué es, sin que haya que enseñárselos. */
@@ -161,7 +165,7 @@ details.pcard .cuerpo{padding:2px 16px 16px}
 .ticket-img{width:100%;border-radius:11px;border:1px solid var(--line);margin:14px 0 4px;display:block}
 .dropzone{border:1px dashed var(--line);border-radius:11px;padding:26px 14px;text-align:center;color:var(--muted);font-size:13.5px;margin:14px 0 4px}
 footer{color:var(--muted);font-size:12px;text-align:center;margin-top:26px;line-height:1.6}
-.ver{position:fixed;right:10px;bottom:10px;z-index:40;font-family:"Familjen Grotesk",sans-serif;
+.ver{position:fixed;right:10px;bottom:10px;z-index:40;font-family:"Familjen Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   font-size:10.5px;font-weight:600;letter-spacing:.02em;color:var(--muted);background:var(--card);
   border:1px solid var(--line);border-radius:999px;padding:3px 9px;opacity:.75;pointer-events:none}
 .copy{border:0;background:transparent;color:var(--muted);font:inherit;font-size:11.5px;line-height:1.5;
@@ -169,7 +173,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:26px;line-
   text-decoration-color:var(--line);display:block;width:100%}
 .copy:hover{color:var(--ink)}
 .legal{max-height:62vh;overflow-y:auto;margin:14px 0 4px;padding-right:4px}
-.legal h4{font-family:"Familjen Grotesk",sans-serif;font-size:13.5px;font-weight:600;margin:16px 0 5px;color:var(--ink)}
+.legal h4{font-family:"Familjen Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:13.5px;font-weight:600;margin:16px 0 5px;color:var(--ink)}
 .legal h4:first-child{margin-top:0}
 .legal p{font-size:12.5px;line-height:1.55;margin:0 0 8px;color:var(--muted)}
 .modal .box.ancho{max-width:520px}
@@ -209,7 +213,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:26px;line-
 </div>
 
 <script>
-const VERSION='V1.18';
+const VERSION='V1.19';
 
 /* =========================================================
    CAPA API — habla con n8n. Cada función es un fetch al
